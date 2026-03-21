@@ -1,6 +1,4 @@
-import argparse
 import json
-from pathlib import Path
 
 from gemini_util import GeminiClient
 
@@ -69,6 +67,54 @@ def gen_schema(user_prompt: str) -> dict:
     return _parse_json(raw)
 
 
+def build_data_generation_request(
+    schema: dict,
+    *,
+    records: int = 500,
+    seed: int = 42,
+    out_dir: str = "output/synthetic",
+    formats: list[str] | None = None,
+    sqlite_path: str | None = None,
+    schema_path: str | None = None,
+) -> dict:
+    chosen_formats = formats or ["csv", "sqlite"]
+    return {
+        "kind": "data_generation_request",
+        "schema_path": schema_path,
+        "schema": schema,
+        "generation": {
+            "records": records,
+            "seed": seed,
+            "out_dir": out_dir,
+            "formats": chosen_formats,
+            "sqlite_path": sqlite_path,
+        },
+    }
+
+
+def gen_schema_with_request(
+    user_prompt: str,
+    *,
+    records: int = 500,
+    seed: int = 42,
+    out_dir: str = "output/synthetic",
+    formats: list[str] | None = None,
+    sqlite_path: str | None = None,
+    schema_path: str | None = None,
+) -> dict:
+    schema = gen_schema(user_prompt)
+    request = build_data_generation_request(
+        schema,
+        records=records,
+        seed=seed,
+        out_dir=out_dir,
+        formats=formats,
+        sqlite_path=sqlite_path,
+        schema_path=schema_path,
+    )
+    return {"schema": schema, "data_generation_request": request}
+
+
 def _parse_json(raw: str) -> dict:
     text = raw.strip()
 
@@ -89,30 +135,3 @@ def _parse_json(raw: str) -> dict:
         return json.loads(text[start : end + 1])
 
     raise ValueError("Model output is not valid JSON")
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate schema JSON from a scenario")
-    parser.add_argument("scenario", nargs="?", help="Business data scenario")
-    parser.add_argument(
-        "--out",
-        default="output/schema.json",
-        help="Output schema json path",
-    )
-    args = parser.parse_args()
-
-    scenario = (args.scenario or input("Business scenario: ")).strip()
-    if not scenario:
-        raise SystemExit("Business scenario is required")
-
-    schema = gen_schema(scenario)
-
-    out_path = Path(args.out)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(schema, indent=2), encoding="utf-8")
-
-    print(f"Schema written to {out_path}")
-
-
-if __name__ == "__main__":
-    main()

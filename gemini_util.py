@@ -38,14 +38,3 @@ class GeminiClient:
             return (response.text or "").strip()
         except Exception as e:
             return f"❌ Error in chat: {str(e)}"
-
-
-if __name__ == "__main__":
-    # Example usage
-    client = GeminiClient()
-
-    user_prompt = "Hello, world!"
-    sys_prompt = "You are a humorous assistant, and you always respond with a joke."
-
-    response = client.chat(user_prompt, sys_prompt)
-    print("Chat response:", response)
