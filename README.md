@@ -55,3 +55,14 @@ In your selected output directory (default `output/synthetic`):
 - Supported formats: `csv`, `sqlite`.
 - For backward compatibility, running `python main.py` without a subcommand defaults to `data` mode.
 - Gemini API credentials are read from environment (`GEMINI_API_KEY` or `GOOGLE_API_KEY`).
+
+## Repo Layout
+
+- Root Python entrypoint: `main.py`
+- Internal modules: `synthgen/`
+  - `synthgen/schema_generator.py` (Requirement 1 schema + request object)
+  - `synthgen/engine.py` (Requirement 2 generation loop)
+  - `synthgen/values.py` (distribution/value logic)
+  - `synthgen/writers.py` (CSV/SQLite writers)
+  - `synthgen/schema_utils.py` (table ordering/count heuristics)
+  - `synthgen/reporting.py` (quality report)

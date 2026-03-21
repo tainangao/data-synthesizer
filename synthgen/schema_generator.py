@@ -1,6 +1,6 @@
 import json
 
-from gemini_util import GeminiClient
+from .gemini_client import GeminiClient
 
 
 GEN_SCH_SYS_PROMPT = """

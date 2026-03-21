@@ -1,7 +1,8 @@
-import dotenv
 import os
-from google import genai
 from threading import Lock
+
+import dotenv
+from google import genai
 
 dotenv.load_dotenv()
 
@@ -11,7 +12,6 @@ class GeminiClient:
     _lock = Lock()
 
     def __new__(cls):
-        """Ensure only one instance (singleton)."""
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
@@ -20,13 +20,10 @@ class GeminiClient:
         return cls._instance
 
     def _initialize(self):
-        """Initialize Gemini client."""
         self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
         self.model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-        self.embedding_model_name = os.getenv("EMBEDDING_MODEL")
 
     def chat(self, user_prompt: str, system_prompt: str | None = None) -> str:
-        """Generate a chat response."""
         try:
             payload = {"model": self.model_name, "contents": user_prompt}
             if system_prompt and system_prompt.strip():

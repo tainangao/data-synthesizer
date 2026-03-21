@@ -3,10 +3,10 @@ import json
 import sys
 from pathlib import Path
 
-from schema_generator import gen_schema_with_request
 from synthgen.engine import generate_data
 from synthgen.reporting import build_quality_report
 from synthgen.schema_utils import table_order
+from synthgen.schema_generator import gen_schema_with_request
 from synthgen.writers import CSVWriter, SQLiteWriter
 
 
