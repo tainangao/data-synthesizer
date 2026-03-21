@@ -1,0 +1,16 @@
+product_id,product_name,product_type,description,interest_rate,is_active,features
+1,Everyday Checking,Checking,Concern new threat think maybe throw pull third.,0.1,True,"{""mobile_access"": true, ""fees"": ""low"", ""digital_onboarding"": true}"
+2,Premier Checking,Checking,Imagine section measure play third white tree seek should computer lawyer easy.,0.2,True,"{""mobile_access"": true, ""fees"": ""medium"", ""digital_onboarding"": false}"
+3,High Yield Savings,Savings,A avoid choice media church tonight response.,3.2,True,"{""mobile_access"": true, ""fees"": ""medium"", ""digital_onboarding"": false}"
+4,Youth Savings,Savings,Support room difference today leave outside task more foot visit save red.,1.5,True,"{""mobile_access"": true, ""fees"": ""low"", ""digital_onboarding"": false}"
+5,Rewards Credit Card,Credit Card,History practice institution pick have old according together Mrs beyond pressure entire.,21.9,True,"{""mobile_access"": true, ""fees"": ""high"", ""digital_onboarding"": true}"
+6,Cashback Credit Card,Credit Card,Level know important leave me book wide.,19.4,True,"{""mobile_access"": true, ""fees"": ""low"", ""digital_onboarding"": false}"
+7,Personal Loan,Personal Loan,Poor must federal produce condition push wrong state character hospital happy well.,10.2,False,"{""mobile_access"": true, ""fees"": ""high"", ""digital_onboarding"": true}"
+8,Auto Loan,Personal Loan,Particularly government stop catch large final medical not.,7.1,True,
+9,Home Mortgage,Mortgage,Own provide pick across know fear carry technology.,5.1,True,"{""mobile_access"": true, ""fees"": ""low"", ""digital_onboarding"": true}"
+10,Index Portfolio,Investment,Little share include opportunity young as just peace machine none network other film quite.,0.0,True,"{""mobile_access"": true, ""fees"": ""low"", ""digital_onboarding"": true}"
+11,Term Deposit 12M,Term Deposit,Sure exist every well cover part mean few in drug stuff million picture.,4.0,True,"{""mobile_access"": true, ""fees"": ""low"", ""digital_onboarding"": true}"
+12,Term Deposit 24M,Term Deposit,Movie mouth young fall once agreement face act painting production method house act.,4.3,True,
+13,Everyday Checking,Checking,Clearly cause learn however face own.,0.1,True,"{""mobile_access"": true, ""fees"": ""high"", ""digital_onboarding"": true}"
+14,Premier Checking,Checking,Condition movement education minute show a theory of couple program American lot.,0.2,False,"{""mobile_access"": true, ""fees"": ""high"", ""digital_onboarding"": true}"
+15,High Yield Savings,Savings,Down organization list street sea black girl worker door change whether small trip.,3.2,True,"{""mobile_access"": true, ""fees"": ""low"", ""digital_onboarding"": true}"
