@@ -1,0 +1,327 @@
+{
+  "schema_name": "RetailBankCRM",
+  "domain": "Retail Banking CRM",
+  "tables": [
+    {
+      "name": "Customers",
+      "description": "Master data for individual customers of the bank, including demographics and contact information.",
+      "columns": [
+        {
+          "name": "customer_id",
+          "type": "INTEGER",
+          "field_role": "identifier",
+          "nullable": false,
+          "primary_key": true,
+          "foreign_key": null
+        },
+        {
+          "name": "first_name",
+          "type": "TEXT",
+          "field_role": "text",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "last_name",
+          "type": "TEXT",
+          "field_role": "text",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "date_of_birth",
+          "type": "DATE",
+          "field_role": "temporal",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "email",
+          "type": "TEXT",
+          "field_role": "text",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "phone_number",
+          "type": "TEXT",
+          "field_role": "text",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "address",
+          "type": "TEXT",
+          "field_role": "text",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "customer_segment",
+          "type": "TEXT",
+          "field_role": "categorical",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "onboarding_date",
+          "type": "DATE",
+          "field_role": "temporal",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "customer_status",
+          "type": "TEXT",
+          "field_role": "categorical",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "customer_preferences",
+          "type": "JSON",
+          "field_role": "semi_structured",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "description": "Reference data for all banking products offered by the bank.",
+      "columns": [
+        {
+          "name": "product_id",
+          "type": "INTEGER",
+          "field_role": "identifier",
+          "nullable": false,
+          "primary_key": true,
+          "foreign_key": null
+        },
+        {
+          "name": "product_name",
+          "type": "TEXT",
+          "field_role": "text",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "product_type",
+          "type": "TEXT",
+          "field_role": "categorical",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "field_role": "text",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "interest_rate",
+          "type": "NUMERIC",
+          "field_role": "numerical",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "is_active",
+          "type": "BOOLEAN",
+          "field_role": "boolean",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "features",
+          "type": "JSON",
+          "field_role": "semi_structured",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        }
+      ]
+    },
+    {
+      "name": "Accounts",
+      "description": "Records of financial accounts held by customers, linking customers to specific products.",
+      "columns": [
+        {
+          "name": "account_id",
+          "type": "INTEGER",
+          "field_role": "identifier",
+          "nullable": false,
+          "primary_key": true,
+          "foreign_key": null
+        },
+        {
+          "name": "customer_id",
+          "type": "INTEGER",
+          "field_role": "identifier",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": {
+            "table": "Customers",
+            "column": "customer_id"
+          }
+        },
+        {
+          "name": "product_id",
+          "type": "INTEGER",
+          "field_role": "identifier",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": {
+            "table": "Products",
+            "column": "product_id"
+          }
+        },
+        {
+          "name": "account_number",
+          "type": "TEXT",
+          "field_role": "identifier",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "opening_date",
+          "type": "DATE",
+          "field_role": "temporal",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "current_balance",
+          "type": "NUMERIC",
+          "field_role": "numerical",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "account_status",
+          "type": "TEXT",
+          "field_role": "categorical",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "currency",
+          "type": "TEXT",
+          "field_role": "categorical",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "last_transaction_date",
+          "type": "DATE",
+          "field_role": "temporal",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        }
+      ]
+    },
+    {
+      "name": "Interactions",
+      "description": "Logs of all customer interactions, including calls, emails, and service requests.",
+      "columns": [
+        {
+          "name": "interaction_id",
+          "type": "INTEGER",
+          "field_role": "identifier",
+          "nullable": false,
+          "primary_key": true,
+          "foreign_key": null
+        },
+        {
+          "name": "customer_id",
+          "type": "INTEGER",
+          "field_role": "identifier",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": {
+            "table": "Customers",
+            "column": "customer_id"
+          }
+        },
+        {
+          "name": "interaction_timestamp",
+          "type": "TIMESTAMP",
+          "field_role": "temporal",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "interaction_type",
+          "type": "TEXT",
+          "field_role": "categorical",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "agent_id",
+          "type": "INTEGER",
+          "field_role": "identifier",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "subject",
+          "type": "TEXT",
+          "field_role": "text",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "notes",
+          "type": "TEXT",
+          "field_role": "text",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "outcome",
+          "type": "TEXT",
+          "field_role": "categorical",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "sentiment",
+          "type": "TEXT",
+          "field_role": "categorical",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        }
+      ]
+    }
+  ]
+}
