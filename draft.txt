@@ -2,7 +2,6 @@ Requirement 1 game plan
 
 1. Collect input
    - Ask the user for the business scenario.
-   - Optional: collect constraints such as minimum number of tables, naming style, and desired output format.
 
 2. Define a canonical output contract (before prompting)
    - Create Pydantic models for Schema, Table, Column, PrimaryKey, and ForeignKey.
@@ -10,7 +9,7 @@ Requirement 1 game plan
    - Require the model to return JSON only in this contract.
 
 3. Assemble prompt and generate schema
-   - Build system prompt using Requirement 1 constraints plus the user scenario.
+   - Build system prompt using Requirement 1 requirements plus the user scenario.
    - Prompt Gemini (or configured LLM) to generate schema JSON that matches the contract.
 
 4. Validate generated schema
@@ -23,7 +22,7 @@ Requirement 1 game plan
      - duplicate table/column names.
 
 5. Deterministic post-processing
-   - Normalize names (for example, snake_case).
+   - Normalize names to a consistent convention.
    - Normalize type aliases to canonical types.
    - Sort entities for stable output.
 
