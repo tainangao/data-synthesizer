@@ -22,6 +22,7 @@ Default outputs:
 
 - `output/schema.json`
 - `output/data_generation_request.json`
+- `output/schema_validation_report.json`
 
 ### 2) Generate synthetic data from schema
 
@@ -53,6 +54,7 @@ In your selected output directory (default `output/synthetic`):
 ## Notes
 
 - Supported formats: `csv`, `sqlite`.
+- `schema` and `pipeline` commands retry schema generation up to 3 attempts and emit a validation report.
 - For backward compatibility, running `python main.py` without a subcommand defaults to `data` mode.
 - Gemini API credentials are read from environment (`GEMINI_API_KEY` or `GOOGLE_API_KEY`).
 
@@ -61,6 +63,8 @@ In your selected output directory (default `output/synthetic`):
 - Root Python entrypoint: `main.py`
 - Internal modules: `synthgen/`
   - `synthgen/schema_generator.py` (Requirement 1 schema + request object)
+  - `synthgen/schema_models.py` (canonical Pydantic schema models)
+  - `synthgen/schema_validator.py` (strict schema validation rules)
   - `synthgen/engine.py` (Requirement 2 generation loop)
   - `synthgen/values.py` (distribution/value logic)
   - `synthgen/writers.py` (CSV/SQLite writers)

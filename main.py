@@ -6,7 +6,7 @@ from pathlib import Path
 from synthgen.engine import generate_data
 from synthgen.reporting import build_quality_report
 from synthgen.schema_utils import table_order
-from synthgen.schema_generator import gen_schema_with_request
+from synthgen.schema_generator import SchemaGenerationError, gen_schema_with_request
 from synthgen.writers import CSVWriter, SQLiteWriter
 
 
@@ -155,6 +155,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Data-generation request output path",
     )
     schema_parser.add_argument(
+        "--validation-report-out",
+        default="output/schema_validation_report.json",
+        help="Schema validation report output path",
+    )
+    schema_parser.add_argument(
         "--records", type=int, default=500, help="Base record count"
     )
     schema_parser.add_argument("--seed", type=int, default=42, help="Random seed")
@@ -217,6 +222,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Data-generation request output path",
     )
     pipeline_parser.add_argument(
+        "--validation-report-out",
+        default="output/schema_validation_report.json",
+        help="Schema validation report output path",
+    )
+    pipeline_parser.add_argument(
         "--records", type=int, default=500, help="Base record count"
     )
     pipeline_parser.add_argument("--seed", type=int, default=42, help="Random seed")
@@ -254,22 +264,34 @@ def main() -> None:
     if args.command == "schema":
         scenario = _resolve_scenario(args.scenario)
         schema_path = Path(args.schema_out)
-        result = gen_schema_with_request(
-            scenario,
-            records=args.records,
-            seed=args.seed,
-            out_dir=args.out_dir,
-            formats=_parse_formats(args.formats),
-            sqlite_path=args.sqlite_path,
-            schema_path=str(schema_path),
-        )
+        try:
+            result = gen_schema_with_request(
+                scenario,
+                records=args.records,
+                seed=args.seed,
+                out_dir=args.out_dir,
+                formats=_parse_formats(args.formats),
+                sqlite_path=args.sqlite_path,
+                schema_path=str(schema_path),
+            )
+        except SchemaGenerationError as exc:
+            written_report = _write_json(
+                args.validation_report_out, exc.validation_report
+            )
+            print(f"Schema validation report written to {written_report}")
+            raise SystemExit(str(exc)) from exc
 
         written_schema = _write_json(args.schema_out, result["schema"])
+        written_report = _write_json(
+            args.validation_report_out,
+            result["validation_report"],
+        )
         request = result["data_generation_request"]
         request["schema_path"] = str(written_schema)
         written_request = _write_json(args.request_out, request)
 
         print(f"Schema written to {written_schema}")
+        print(f"Schema validation report written to {written_report}")
         print(f"Data generation request written to {written_request}")
 
         if args.run_data:
@@ -279,22 +301,34 @@ def main() -> None:
     if args.command == "pipeline":
         scenario = _resolve_scenario(args.scenario)
         schema_path = Path(args.schema_out)
-        result = gen_schema_with_request(
-            scenario,
-            records=args.records,
-            seed=args.seed,
-            out_dir=args.out_dir,
-            formats=_parse_formats(args.formats),
-            sqlite_path=args.sqlite_path,
-            schema_path=str(schema_path),
-        )
+        try:
+            result = gen_schema_with_request(
+                scenario,
+                records=args.records,
+                seed=args.seed,
+                out_dir=args.out_dir,
+                formats=_parse_formats(args.formats),
+                sqlite_path=args.sqlite_path,
+                schema_path=str(schema_path),
+            )
+        except SchemaGenerationError as exc:
+            written_report = _write_json(
+                args.validation_report_out, exc.validation_report
+            )
+            print(f"Schema validation report written to {written_report}")
+            raise SystemExit(str(exc)) from exc
 
         written_schema = _write_json(args.schema_out, result["schema"])
+        written_report = _write_json(
+            args.validation_report_out,
+            result["validation_report"],
+        )
         request = result["data_generation_request"]
         request["schema_path"] = str(written_schema)
         written_request = _write_json(args.request_out, request)
 
         print(f"Schema written to {written_schema}")
+        print(f"Schema validation report written to {written_report}")
         print(f"Data generation request written to {written_request}")
         _run_request(request)
         return

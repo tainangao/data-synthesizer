@@ -1,6 +1,13 @@
 import json
 
+from typing import Any
+
 from .gemini_client import GeminiClient
+from .schema_validator import format_validation_feedback, validate_schema
+
+MAX_SCHEMA_ATTEMPTS = 3
+MAX_RETRY_FEEDBACK_ISSUES = 12
+MAX_PREVIOUS_OUTPUT_CHARS = 6000
 
 
 GEN_SCH_SYS_PROMPT = """
@@ -61,10 +68,90 @@ Before finalizing, self-check:
 """
 
 
-def gen_schema(user_prompt: str) -> dict:
+class SchemaGenerationError(RuntimeError):
+    def __init__(self, message: str, *, validation_report: dict[str, Any]):
+        super().__init__(message)
+        self.validation_report = validation_report
+
+
+def gen_schema(user_prompt: str, *, max_attempts: int = MAX_SCHEMA_ATTEMPTS) -> dict:
+    result = gen_schema_with_validation(user_prompt, max_attempts=max_attempts)
+    return result["schema"]
+
+
+def gen_schema_with_validation(
+    user_prompt: str,
+    *,
+    max_attempts: int = MAX_SCHEMA_ATTEMPTS,
+) -> dict:
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be >= 1")
+
     client = GeminiClient()
-    raw = client.chat(user_prompt, GEN_SCH_SYS_PROMPT)
-    return _parse_json(raw)
+    attempt_prompt = user_prompt
+    attempts: list[dict[str, Any]] = []
+
+    for attempt_number in range(1, max_attempts + 1):
+        raw = client.chat(attempt_prompt, GEN_SCH_SYS_PROMPT)
+
+        validated_schema: dict[str, Any] | None = None
+        summary: dict[str, Any]
+        issues: list[dict[str, str]]
+
+        try:
+            parsed_schema = _parse_json(raw)
+        except (json.JSONDecodeError, ValueError) as exc:
+            issues = [
+                {
+                    "code": "json_parse_error",
+                    "message": str(exc),
+                    "path": "model_output",
+                }
+            ]
+            summary = _empty_attempt_summary()
+        else:
+            validation = validate_schema(parsed_schema)
+            issues = validation["issues"]
+            summary = validation["summary"]
+            if validation["valid"]:
+                validated_schema = validation["schema"]
+
+        attempt_info = {
+            "attempt": attempt_number,
+            "valid": validated_schema is not None,
+            "issue_count": len(issues),
+            "issues": issues,
+            "summary": summary,
+            "response_preview": _response_preview(raw),
+        }
+        attempts.append(attempt_info)
+
+        if validated_schema is not None:
+            return {
+                "schema": validated_schema,
+                "validation_report": _build_validation_report(
+                    attempts=attempts,
+                    valid=True,
+                    max_attempts=max_attempts,
+                ),
+            }
+
+        if attempt_number < max_attempts:
+            attempt_prompt = _build_retry_prompt(
+                user_prompt=user_prompt,
+                issues=issues,
+                previous_output=raw,
+            )
+
+    report = _build_validation_report(
+        attempts=attempts,
+        valid=False,
+        max_attempts=max_attempts,
+    )
+    raise SchemaGenerationError(
+        f"Failed to generate a valid schema after {max_attempts} attempts.",
+        validation_report=report,
+    )
 
 
 def build_data_generation_request(
@@ -95,6 +182,7 @@ def build_data_generation_request(
 def gen_schema_with_request(
     user_prompt: str,
     *,
+    max_attempts: int = MAX_SCHEMA_ATTEMPTS,
     records: int = 500,
     seed: int = 42,
     out_dir: str = "output/synthetic",
@@ -102,7 +190,8 @@ def gen_schema_with_request(
     sqlite_path: str | None = None,
     schema_path: str | None = None,
 ) -> dict:
-    schema = gen_schema(user_prompt)
+    generated = gen_schema_with_validation(user_prompt, max_attempts=max_attempts)
+    schema = generated["schema"]
     request = build_data_generation_request(
         schema,
         records=records,
@@ -112,7 +201,69 @@ def gen_schema_with_request(
         sqlite_path=sqlite_path,
         schema_path=schema_path,
     )
-    return {"schema": schema, "data_generation_request": request}
+    return {
+        "schema": schema,
+        "validation_report": generated["validation_report"],
+        "data_generation_request": request,
+    }
+
+
+def _build_retry_prompt(
+    *,
+    user_prompt: str,
+    issues: list[dict[str, str]],
+    previous_output: str,
+) -> str:
+    clipped_output = previous_output.strip()
+    if len(clipped_output) > MAX_PREVIOUS_OUTPUT_CHARS:
+        clipped_output = (
+            clipped_output[:MAX_PREVIOUS_OUTPUT_CHARS].rstrip() + "\n...[truncated]"
+        )
+
+    feedback = format_validation_feedback(issues, max_items=MAX_RETRY_FEEDBACK_ISSUES)
+    return (
+        f"Business scenario:\n{user_prompt.strip()}\n\n"
+        "Your previous schema output failed validation. "
+        "Fix every issue and return JSON only.\n\n"
+        "Validation issues to fix:\n"
+        f"{feedback}\n\n"
+        "Previous invalid output:\n"
+        f"{clipped_output}\n\n"
+        "Return exactly one corrected JSON object with the required shape."
+    )
+
+
+def _build_validation_report(
+    *,
+    attempts: list[dict[str, Any]],
+    valid: bool,
+    max_attempts: int,
+) -> dict[str, Any]:
+    final_issue_count = attempts[-1]["issue_count"] if attempts else 0
+    return {
+        "valid": valid,
+        "max_attempts": max_attempts,
+        "attempt_count": len(attempts),
+        "final_issue_count": final_issue_count,
+        "attempts": attempts,
+    }
+
+
+def _empty_attempt_summary() -> dict[str, Any]:
+    return {
+        "table_count": 0,
+        "column_count": 0,
+        "primary_key_count": 0,
+        "foreign_key_count": 0,
+        "field_role_counts": {},
+    }
+
+
+def _response_preview(raw: str, *, max_chars: int = 240) -> str:
+    compact = " ".join(raw.strip().split())
+    if len(compact) <= max_chars:
+        return compact
+    return compact[: max_chars - 3] + "..."
 
 
 def _parse_json(raw: str) -> dict:
