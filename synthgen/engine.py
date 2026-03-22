@@ -1,5 +1,6 @@
 from collections import Counter, defaultdict
 import random
+import time
 
 from faker import Faker
 
@@ -41,6 +42,7 @@ def generate_data(
             lambda: {"count": 0, "sum": 0.0, "min": None, "max": None}
         ),
         "fk_stats": defaultdict(lambda: {"rows": 0, "nulls": 0, "invalid": 0}),
+        "table_performance": {},
     }
     summary: dict[str, int] = {}
 
@@ -49,6 +51,7 @@ def generate_data(
         columns = table["columns"]
         pk_col = pk_column(table)
         row_count = counts[table_name]
+        table_start = time.perf_counter()
 
         for writer in writers:
             writer.start_table(table)
@@ -116,5 +119,13 @@ def generate_data(
             writer.end_table()
 
         summary[table_name] = row_count
+        table_elapsed = time.perf_counter() - table_start
+        metrics["table_performance"][table_name] = {
+            "rows": row_count,
+            "elapsed_seconds": round(table_elapsed, 4),
+            "rows_per_second": round(row_count / table_elapsed, 2)
+            if table_elapsed > 0
+            else None,
+        }
 
     return summary, metrics

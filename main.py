@@ -1,8 +1,10 @@
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
+from synthgen.common import safe_name
 from synthgen.engine import generate_data
 from synthgen.reporting import build_quality_report
 from synthgen.schema_utils import table_order
@@ -32,6 +34,41 @@ def _parse_formats(raw: str | list[str] | None) -> list[str]:
     return normalized
 
 
+def _peak_memory_mb() -> float | None:
+    try:
+        import resource
+    except ImportError:
+        return None
+
+    max_rss = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    if sys.platform == "darwin":
+        return round(max_rss / (1024 * 1024), 4)
+    return round(max_rss / 1024, 4)
+
+
+def _collect_output_artifact_sizes(
+    summary: dict[str, int],
+    *,
+    output_dir: Path,
+    formats: list[str],
+    sqlite_path: str | None,
+) -> dict[str, int]:
+    artifacts: dict[str, int] = {}
+
+    if "csv" in formats:
+        for table_name in summary:
+            csv_path = output_dir / f"{safe_name(table_name)}.csv"
+            if csv_path.exists():
+                artifacts[str(csv_path)] = csv_path.stat().st_size
+
+    if "sqlite" in formats:
+        db_path = Path(sqlite_path) if sqlite_path else output_dir / "synthetic.db"
+        if db_path.exists():
+            artifacts[str(db_path)] = db_path.stat().st_size
+
+    return artifacts
+
+
 def _run_data_generation(
     schema: dict,
     *,
@@ -40,7 +77,9 @@ def _run_data_generation(
     seed: int,
     formats: list[str],
     sqlite_path: str | None,
+    perf_report_out: str | None,
 ) -> None:
+    generation_start = time.perf_counter()
     output_dir = Path(out_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -73,6 +112,38 @@ def _run_data_generation(
         for writer in writers:
             writer.close()
 
+    elapsed_seconds = time.perf_counter() - generation_start
+    peak_memory_mb = _peak_memory_mb()
+    artifact_sizes = _collect_output_artifact_sizes(
+        summary,
+        output_dir=output_dir,
+        formats=formats,
+        sqlite_path=sqlite_path,
+    )
+
+    total_rows = sum(summary.values())
+    output_bytes = sum(artifact_sizes.values())
+    output_mb = output_bytes / (1024 * 1024)
+    performance_report = {
+        "schema_name": schema.get("schema_name"),
+        "domain": schema.get("domain"),
+        "seed": seed,
+        "records_input": records,
+        "rows_generated_total": total_rows,
+        "elapsed_seconds": round(elapsed_seconds, 4),
+        "rows_per_second": round(total_rows / elapsed_seconds, 2)
+        if elapsed_seconds > 0
+        else None,
+        "peak_memory_mb": peak_memory_mb,
+        "output_bytes": output_bytes,
+        "output_mb": round(output_mb, 4),
+        "mb_per_second": round(output_mb / elapsed_seconds, 4)
+        if elapsed_seconds > 0
+        else None,
+        "artifacts": artifact_sizes,
+        "table_performance": metrics.get("table_performance", {}),
+    }
+
     report = build_quality_report(
         schema=schema, summary=summary, metrics=metrics, seed=seed
     )
@@ -83,9 +154,20 @@ def _run_data_generation(
         json.dumps(report, indent=2), encoding="utf-8"
     )
 
+    perf_report_path = (
+        Path(perf_report_out)
+        if perf_report_out
+        else output_dir / "performance_report.json"
+    )
+    perf_report_path.parent.mkdir(parents=True, exist_ok=True)
+    perf_report_path.write_text(
+        json.dumps(performance_report, indent=2), encoding="utf-8"
+    )
+
     outputs = ["csv" if csv_writer else None, "sqlite" if sqlite_writer else None]
     outputs = [entry for entry in outputs if entry]
     print(f"Generated synthetic data ({', '.join(outputs)}) in {output_dir}")
+    print(f"Performance report written to {perf_report_path}")
 
 
 def _run_request(
@@ -96,6 +178,7 @@ def _run_request(
     seed: int | None = None,
     formats: str | None = None,
     sqlite_path: str | None = None,
+    perf_report_out: str | None = None,
 ) -> None:
     schema = request.get("schema")
     if not isinstance(schema, dict):
@@ -113,6 +196,11 @@ def _run_request(
     resolved_sqlite_path = (
         sqlite_path if sqlite_path is not None else generation.get("sqlite_path")
     )
+    resolved_perf_report_out = (
+        perf_report_out
+        if perf_report_out is not None
+        else generation.get("perf_report_out")
+    )
 
     _run_data_generation(
         schema,
@@ -121,6 +209,7 @@ def _run_request(
         seed=resolved_seed,
         formats=resolved_formats,
         sqlite_path=resolved_sqlite_path,
+        perf_report_out=resolved_perf_report_out,
     )
 
 
@@ -177,6 +266,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional sqlite output path for downstream generation",
     )
     schema_parser.add_argument(
+        "--perf-report-out",
+        default=None,
+        help="Optional performance report path for downstream generation",
+    )
+    schema_parser.add_argument(
         "--run-data",
         action="store_true",
         help="Immediately run data generation using emitted request",
@@ -207,6 +301,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--sqlite-path",
         default=None,
         help="Optional sqlite output path override",
+    )
+    data_parser.add_argument(
+        "--perf-report-out",
+        default=None,
+        help="Optional performance report path override",
     )
 
     pipeline_parser = subparsers.add_parser(
@@ -243,6 +342,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional sqlite output path",
     )
+    pipeline_parser.add_argument(
+        "--perf-report-out",
+        default=None,
+        help="Optional performance report path",
+    )
 
     return parser
 
@@ -272,6 +376,7 @@ def main() -> None:
                 out_dir=args.out_dir,
                 formats=_parse_formats(args.formats),
                 sqlite_path=args.sqlite_path,
+                perf_report_out=args.perf_report_out,
                 schema_path=str(schema_path),
             )
         except SchemaGenerationError as exc:
@@ -295,7 +400,7 @@ def main() -> None:
         print(f"Data generation request written to {written_request}")
 
         if args.run_data:
-            _run_request(request)
+            _run_request(request, perf_report_out=args.perf_report_out)
         return
 
     if args.command == "pipeline":
@@ -309,6 +414,7 @@ def main() -> None:
                 out_dir=args.out_dir,
                 formats=_parse_formats(args.formats),
                 sqlite_path=args.sqlite_path,
+                perf_report_out=args.perf_report_out,
                 schema_path=str(schema_path),
             )
         except SchemaGenerationError as exc:
@@ -330,7 +436,7 @@ def main() -> None:
         print(f"Schema written to {written_schema}")
         print(f"Schema validation report written to {written_report}")
         print(f"Data generation request written to {written_request}")
-        _run_request(request)
+        _run_request(request, perf_report_out=args.perf_report_out)
         return
 
     if args.request:
@@ -342,6 +448,7 @@ def main() -> None:
             seed=args.seed,
             formats=args.formats,
             sqlite_path=args.sqlite_path,
+            perf_report_out=args.perf_report_out,
         )
         return
 
@@ -353,6 +460,7 @@ def main() -> None:
         seed=args.seed if args.seed is not None else 42,
         formats=_parse_formats(args.formats),
         sqlite_path=args.sqlite_path,
+        perf_report_out=args.perf_report_out,
     )
 
 

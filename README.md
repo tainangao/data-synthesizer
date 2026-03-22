@@ -50,10 +50,12 @@ In your selected output directory (default `output/synthetic`):
 - `synthetic.db` (when `sqlite` format enabled)
 - `summary.json`
 - `quality_report.json`
+- `performance_report.json`
 
 ## Notes
 
 - Supported formats: `csv`, `sqlite`.
+- Use `--perf-report-out` to override the default performance report path.
 - `schema` and `pipeline` commands retry schema generation up to 3 attempts and emit a validation report.
 - For backward compatibility, running `python main.py` without a subcommand defaults to `data` mode.
 - Gemini API credentials are read from environment (`GEMINI_API_KEY` or `GOOGLE_API_KEY`).

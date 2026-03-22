@@ -162,6 +162,7 @@ def build_data_generation_request(
     out_dir: str = "output/synthetic",
     formats: list[str] | None = None,
     sqlite_path: str | None = None,
+    perf_report_out: str | None = None,
     schema_path: str | None = None,
 ) -> dict:
     chosen_formats = formats or ["csv", "sqlite"]
@@ -175,6 +176,7 @@ def build_data_generation_request(
             "out_dir": out_dir,
             "formats": chosen_formats,
             "sqlite_path": sqlite_path,
+            "perf_report_out": perf_report_out,
         },
     }
 
@@ -188,6 +190,7 @@ def gen_schema_with_request(
     out_dir: str = "output/synthetic",
     formats: list[str] | None = None,
     sqlite_path: str | None = None,
+    perf_report_out: str | None = None,
     schema_path: str | None = None,
 ) -> dict:
     generated = gen_schema_with_validation(user_prompt, max_attempts=max_attempts)
@@ -199,6 +202,7 @@ def gen_schema_with_request(
         out_dir=out_dir,
         formats=formats,
         sqlite_path=sqlite_path,
+        perf_report_out=perf_report_out,
         schema_path=schema_path,
     )
     return {
