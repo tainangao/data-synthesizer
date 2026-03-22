@@ -1,0 +1,16 @@
+{
+  "command": "data",
+  "schema": "output/schema.json",
+  "request": null,
+  "out_dir": "output/synthetic",
+  "records": 500,
+  "seed": 42,
+  "formats": "csv,sqlite",
+  "sqlite_path": null,
+  "perf_report_out": null,
+  "schema_out": "output/schema.json",
+  "request_out": "output/data_generation_request.json",
+  "validation_report_out": "output/schema_validation_report.json",
+  "scenario": "",
+  "run_data": false
+}

@@ -10,6 +10,30 @@ Use `main.py` for all workflows:
 python main.py --help
 ```
 
+For VS Code click-to-run workflow, edit `run_config.json` and run:
+
+```bash
+python main.py
+```
+
+Minimal `run_config.json` example:
+
+```json
+{
+  "command": "data",
+  "request": "output/data_generation_request.json",
+  "records": 10000,
+  "formats": "csv,sqlite",
+  "out_dir": "output/synthetic"
+}
+```
+
+You can also point to another config file:
+
+```bash
+python main.py --config path/to/config.json
+```
+
 ## Commands
 
 ### 1) Generate schema + data-generation request
@@ -42,6 +66,27 @@ python main.py data --request output/data_generation_request.json
 python main.py pipeline "Trading platform with portfolios, instruments, orders, and executions"
 ```
 
+## Benchmarking Scalability
+
+Use the benchmark runner to stress test generation at multiple scales and repeats.
+It is VS Code friendly (edit config at the top of the file, then click Run):
+
+```bash
+python scripts/benchmark_generation.py
+```
+
+Main config lives in `scripts/benchmark_generation.py`:
+
+- `REQUEST_PATH` or `SCHEMA_PATH` (pick one)
+- `SCALES`, `REPEATS`, `FORMATS`, `SEED`
+- `OUTPUT_ROOT`, `LABEL`, `TIMEOUT_SECONDS`, `MARKDOWN_COPY`
+
+Benchmark outputs are written under `output/benchmarks/<timestamp>/`:
+
+- `benchmark_results.json` (aggregated mean/p95/stdev stats by scale)
+- `benchmark_runs.json` (raw per-run details)
+- `scalability_results.md` (rubric-friendly summary table)
+
 ## Outputs
 
 In your selected output directory (default `output/synthetic`):
@@ -56,12 +101,14 @@ In your selected output directory (default `output/synthetic`):
 
 - Supported formats: `csv`, `sqlite`.
 - Use `--perf-report-out` to override the default performance report path.
+- `main.py` reads `run_config.json` automatically when it exists.
 - `schema` and `pipeline` commands retry schema generation up to 3 attempts and emit a validation report.
 - For backward compatibility, running `python main.py` without a subcommand defaults to `data` mode.
 - Gemini API credentials are read from environment (`GEMINI_API_KEY` or `GOOGLE_API_KEY`).
 
 ## Repo Layout
 
+- Run config template: `run_config.json`
 - Root Python entrypoint: `main.py`
 - Internal modules: `synthgen/`
   - `synthgen/schema_generator.py` (Requirement 1 schema + request object)
@@ -72,3 +119,4 @@ In your selected output directory (default `output/synthetic`):
   - `synthgen/writers.py` (CSV/SQLite writers)
   - `synthgen/schema_utils.py` (table ordering/count heuristics)
   - `synthgen/reporting.py` (quality report)
+- Benchmarking script: `scripts/benchmark_generation.py`
