@@ -54,6 +54,14 @@ Default outputs:
 python main.py data --schema output/schema.json --records 500 --formats csv,sqlite
 ```
 
+`--schema` can load JSON, SQL DDL, parquet, or delta schema inputs.
+
+Example SQL input:
+
+```bash
+python main.py data --schema assignment/sample_schema.sql --records 500 --formats csv,sqlite
+```
+
 ### 3) Generate synthetic data from request JSON
 
 ```bash
@@ -99,7 +107,10 @@ In your selected output directory (default `output/synthetic`):
 
 ## Notes
 
-- Supported formats: `csv`, `sqlite`.
+- Output formats: `csv`, `sqlite`.
+- Schema input formats for `data --schema`: `json`, `sql`, `parquet`, `delta`.
+- Parquet schema loading uses `pyarrow` or `fastparquet` when available.
+- Delta schema loading reads `_delta_log` metadata (and also supports `deltalake` if installed).
 - Use `--perf-report-out` to override the default performance report path.
 - `main.py` reads `run_config.json` automatically when it exists.
 - `schema` and `pipeline` commands retry schema generation up to 3 attempts and emit a validation report.
@@ -114,6 +125,8 @@ In your selected output directory (default `output/synthetic`):
   - `synthgen/schema_generator.py` (Requirement 1 schema + request object)
   - `synthgen/schema_models.py` (canonical Pydantic schema models)
   - `synthgen/schema_validator.py` (strict schema validation rules)
+  - `synthgen/schema_loader.py` (multi-format schema loader for Requirement 2)
+  - `synthgen/schema_adapters/` (json/sql/parquet/delta adapters)
   - `synthgen/engine.py` (Requirement 2 generation loop)
   - `synthgen/values.py` (distribution/value logic)
   - `synthgen/writers.py` (CSV/SQLite writers)

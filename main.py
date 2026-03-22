@@ -7,6 +7,7 @@ from synthgen.common import safe_name
 from synthgen.engine import generate_data
 from synthgen.reporting import build_quality_report
 from synthgen.schema_generator import SchemaGenerationError, gen_schema_with_request
+from synthgen.schema_loader import load_schema
 from synthgen.schema_utils import table_order
 from synthgen.writers import CSVWriter, SQLiteWriter
 
@@ -27,6 +28,7 @@ Commands:
 
 Notes:
   - Running with no command defaults to `data`.
+  - `--schema` accepts JSON, SQL, parquet, or delta inputs.
   - If `data` gets no `--request`, it reads `output/schema.json`.
   - Optional config file: `run_config.json` (or `--config path/to/file.json`).
 """
@@ -416,7 +418,7 @@ def main() -> None:
         return
 
     schema_path = Path(_opt_str(options, "schema") or "output/schema.json")
-    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    schema = load_schema(schema_path)
     _run_data_generation(
         schema,
         out_dir=_opt_str(options, "out_dir") or "output/synthetic",
