@@ -192,7 +192,7 @@ def gen_schema_with_request(
         json.dump(request, f, indent=2)
     logger.info(f"Saved data generation request to {request_path}")
 
-    schema_path = outdir / "json_schema.json"
+    schema_path = outdir / "schema.json"
     with schema_path.open("w") as f:
         json.dump(schema, f, indent=2)
     logger.info(f"Saved generated schema to {schema_path}")
