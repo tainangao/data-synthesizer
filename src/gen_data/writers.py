@@ -2,8 +2,9 @@ import csv
 import json
 from pathlib import Path
 import sqlite3
+from typing import Any
 
-from src.common import safe_name
+from src.common import parse_datetime, safe_name
 
 
 def serialize_cell(value: object) -> object:
@@ -12,6 +13,79 @@ def serialize_cell(value: object) -> object:
     if isinstance(value, bool):
         return int(value)
     return value
+
+
+def _arrow_type(pa: Any, col: dict) -> Any:
+    dtype = str(col.get("type", "TEXT")).upper()
+    mapping = {
+        "INTEGER": pa.int64(),
+        "NUMERIC": pa.float64(),
+        "REAL": pa.float64(),
+        "BOOLEAN": pa.bool_(),
+        "DATE": pa.date32(),
+        "TIMESTAMP": pa.timestamp("us"),
+        "JSON": pa.string(),
+        "XML": pa.string(),
+        "TEXT": pa.string(),
+    }
+    return mapping.get(dtype, pa.string())
+
+
+def _coerce_arrow_value(col: dict, value: object) -> object:
+    if value is None:
+        return None
+
+    dtype = str(col.get("type", "TEXT")).upper()
+
+    if isinstance(value, (dict, list)):
+        return json.dumps(value)
+
+    if dtype == "BOOLEAN":
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        lowered = str(value).strip().lower()
+        if lowered in {"1", "true", "t", "yes", "y"}:
+            return True
+        if lowered in {"0", "false", "f", "no", "n"}:
+            return False
+        return bool(value)
+
+    if dtype == "INTEGER":
+        return int(value)
+
+    if dtype in {"NUMERIC", "REAL"}:
+        return float(value)
+
+    if dtype == "DATE":
+        parsed = parse_datetime(value)
+        return parsed.date() if parsed else None
+
+    if dtype == "TIMESTAMP":
+        return parse_datetime(value)
+
+    if dtype in {"JSON", "XML"}:
+        return str(value)
+
+    return value
+
+
+def _build_arrow_table(pa: Any, table: dict, rows: list[dict[str, object]]) -> Any:
+    fields = []
+    arrays = []
+    for col in table["columns"]:
+        field = pa.field(
+            col["name"],
+            _arrow_type(pa, col),
+            nullable=bool(col.get("nullable", True) and not col.get("primary_key")),
+        )
+        fields.append(field)
+        values = [_coerce_arrow_value(col, row.get(col["name"])) for row in rows]
+        arrays.append(pa.array(values, type=field.type))
+
+    schema = pa.schema(fields)
+    return pa.Table.from_arrays(arrays, schema=schema)
 
 
 class CSVWriter:
@@ -117,3 +191,89 @@ class SQLiteWriter:
     def close(self) -> None:
         self.conn.commit()
         self.conn.close()
+
+
+class ParquetWriter:
+    def __init__(self, out_dir: Path):
+        self.out_dir = out_dir
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            import pyarrow as pa
+            import pyarrow.parquet as pq
+        except ImportError as exc:
+            raise RuntimeError("ParquetWriter requires the 'pyarrow' package.") from exc
+
+        self._pa = pa
+        self._pq = pq
+        self._table: dict | None = None
+        self._rows: list[dict[str, object]] = []
+        self.table_paths: dict[str, Path] = {}
+
+    def start_table(self, table: dict) -> None:
+        self._table = table
+        self._rows = []
+
+    def write_row(self, row: dict) -> None:
+        self._rows.append(dict(row))
+
+    def end_table(self) -> None:
+        if self._table is None:
+            return
+
+        table_name = self._table["name"]
+        arrow_table = _build_arrow_table(self._pa, self._table, self._rows)
+        output_path = self.out_dir / f"{safe_name(table_name)}.parquet"
+        self._pq.write_table(arrow_table, output_path)
+        self.table_paths[table_name] = output_path
+
+        self._table = None
+        self._rows = []
+
+    def close(self) -> None:
+        self.end_table()
+
+
+class DeltaWriter:
+    def __init__(self, out_dir: Path):
+        self.out_dir = out_dir
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            import pyarrow as pa
+        except ImportError as exc:
+            raise RuntimeError("DeltaWriter requires the 'pyarrow' package.") from exc
+
+        try:
+            from deltalake import write_deltalake
+        except ImportError as exc:
+            raise RuntimeError("DeltaWriter requires the 'deltalake' package.") from exc
+
+        self._pa = pa
+        self._write_deltalake = write_deltalake
+        self._table: dict | None = None
+        self._rows: list[dict[str, object]] = []
+        self.table_paths: dict[str, Path] = {}
+
+    def start_table(self, table: dict) -> None:
+        self._table = table
+        self._rows = []
+
+    def write_row(self, row: dict) -> None:
+        self._rows.append(dict(row))
+
+    def end_table(self) -> None:
+        if self._table is None:
+            return
+
+        table_name = self._table["name"]
+        arrow_table = _build_arrow_table(self._pa, self._table, self._rows)
+        table_path = self.out_dir / safe_name(table_name)
+        self._write_deltalake(str(table_path), arrow_table, mode="overwrite")
+        self.table_paths[table_name] = table_path
+
+        self._table = None
+        self._rows = []
+
+    def close(self) -> None:
+        self.end_table()
