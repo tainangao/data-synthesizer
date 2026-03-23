@@ -18,24 +18,6 @@ from .values import (
 )
 
 
-def _serialize_metrics(metrics: dict) -> dict:
-    """Convert metrics to JSON-serializable format."""
-    result = {}
-    for key, value in metrics.items():
-        if isinstance(value, Counter):
-            result[key] = dict(value)
-        elif isinstance(value, defaultdict):
-            result[key] = {
-                k: dict(v) if isinstance(v, (Counter, defaultdict)) else v
-                for k, v in value.items()
-            }
-        elif isinstance(value, dict):
-            result[key] = _serialize_metrics(value)
-        else:
-            result[key] = value
-    return result
-
-
 def generate_data(
     schema: dict,
     records: int,
@@ -211,12 +193,7 @@ def generate_data(
             json.dumps(summary, indent=2), encoding="utf-8"
         )
         (out_dir / "metrics.json").write_text(
-            json.dumps(
-                {"summary": summary, "metrics": _serialize_metrics(metrics)},
-                indent=2,
-                default=str,
-            ),
-            encoding="utf-8",
+            json.dumps(metrics, indent=2), encoding="utf-8"
         )
 
     return summary, metrics
