@@ -1,3 +1,7 @@
+import json
+from pathlib import Path
+
+
 def _percentile(values: list[int], pct: float) -> float | None:
     if not values:
         return None
@@ -12,7 +16,7 @@ def _percentile(values: list[int], pct: float) -> float | None:
     return ordered[low] * (1.0 - weight) + ordered[high] * weight
 
 
-def build_quality_report(schema: dict, summary: dict, metrics: dict, seed: int) -> dict:
+def build_quality_report(schema: dict, summary: dict, metrics: dict, seed: int, out_dir: str | Path) -> dict:
     categorical = {}
     for key, counts in metrics["categorical_counts"].items():
         categorical[key] = [
@@ -97,7 +101,7 @@ def build_quality_report(schema: dict, summary: dict, metrics: dict, seed: int) 
             else None,
         }
 
-    return {
+    report = {
         "schema_name": schema.get("schema_name"),
         "domain": schema.get("domain"),
         "seed": seed,
@@ -110,3 +114,10 @@ def build_quality_report(schema: dict, summary: dict, metrics: dict, seed: int) 
         "numerical_summaries": numerical,
         "null_counts": dict(metrics["null_counts"]),
     }
+    
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "data_quality_report.json").write_text(
+            json.dumps(report, indent=2), encoding="utf-8"
+        )
+
+    return report
