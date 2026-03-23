@@ -31,6 +31,17 @@ Even with this design, the program still generates **PostgreSQL / Delta / Parque
 6. **Writers** for CSV, SQLite, Parquet, Delta (`src/gen_data/data_writers.py`).
 7. **Metrics + quality report** for integrity, distribution, and relationship checks (`src/gen_data/metrics_collector.py`, `src/reporting.py`).
 
+## Business logic sanity checks
+
+This generator is not pure random Faker output. It applies business/domain logic during generation:
+
+- **Referential integrity**: child keys are sampled from generated parent PK pools (`src/gen_data/data_generator.py`).
+- **Temporal ordering**: date/timestamp fields use temporal anchors so downstream events are generated after upstream events when applicable (`src/gen_data/value_generators.py`).
+- **Status lifecycle logic**: child statuses follow transition rules from parent status (`src/gen_data/relationship_rules.py`).
+- **Segment-driven logic**: segment influences risk and type distributions (`src/gen_data/relationship_rules.py`).
+- **Country/currency consistency**: currency is copied from parent or mapped from country (`src/gen_data/relationship_rules.py`).
+
+
 ## Assignment requirement coverage
 
 ### Requirement 1 - Schema generation
