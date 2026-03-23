@@ -255,14 +255,3 @@ def _parse_json(raw: str) -> dict:
         return json.loads(text[start : end + 1])
 
     raise ValueError("Model output is not valid JSON")
-
-
-if __name__ == "__main__":
-    gen_schema_with_request(
-        user_prompt="credit risk",
-        max_attempts=3,
-        records=10,
-        seed=74,
-        out_dir="output/synthetic/credit_risk_10_records",
-        data_formats=["csv"],
-    )
