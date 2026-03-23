@@ -19,13 +19,17 @@ Even with this design, the program still generates **PostgreSQL / Delta / Parque
 - Delta schema/data (`demo_output/schema/delta/`, `demo_output/delta/`)
 
 ## End-to-end architecture
+
+![End-to-end architecture diagram](mermaid-diagram.png)
+
+
 1. **Schema generation** from business prompt using Gemini (`src/gen_schema/schema_generator.py`).
 2. **Schema validation** with strict structural + logical checks (`src/gen_schema/schema_validator.py`).
 3. **Schema conversion** to sqlite/psql/parquet/delta artifacts (`src/gen_schema/schema_converter.py`).
-4. **Data generation** with PK/FK-aware ordering and Faker-based value generation (`src/gen_data/engine.py`, `src/gen_data/values.py`).
+4. **Data generation** with PK/FK-aware ordering and Faker-based value generation (`src/gen_data/data_generator.py`, `src/gen_data/value_generators.py`).
 5. **Relationship-aware generation** for status/type/risk/currency consistency (`src/gen_data/relationship_rules.py`).
-6. **Writers** for CSV, SQLite, Parquet, Delta (`src/gen_data/writers.py`).
-7. **Quality report** for integrity, distribution, and relationship checks (`src/reporting.py`).
+6. **Writers** for CSV, SQLite, Parquet, Delta (`src/gen_data/data_writers.py`).
+7. **Metrics + quality report** for integrity, distribution, and relationship checks (`src/gen_data/metrics_collector.py`, `src/reporting.py`).
 
 ## Assignment requirement coverage
 
