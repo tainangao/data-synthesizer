@@ -7,9 +7,9 @@ from pathlib import Path
 from synthgen.common import safe_name
 from synthgen.engine import generate_data
 from synthgen.reporting import build_quality_report
-from synthgen.schema_generator import SchemaGenerationError, gen_schema_with_request
-from synthgen.schema_loader import load_schema
-from synthgen.schema_utils import table_order
+from synthgen.gen_schema.schema_generator import SchemaGenerationError, gen_schema_with_request
+from synthgen.gen_schema.schema_loader import load_schema
+from synthgen.gen_schema.schema_utils import table_order
 from synthgen.writers import CSVWriter, SQLiteWriter
 
 DEFAULT_CONFIG_PATH = Path("run_config.json")

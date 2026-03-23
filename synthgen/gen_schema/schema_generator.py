@@ -2,8 +2,8 @@ import json
 
 from typing import Any
 
-from .gemini_client import GeminiClient
-from .schema_validator import format_validation_feedback, validate_schema
+from synthgen.gen_schema.gemini_client import GeminiClient
+from synthgen.gen_schema.schema_validator import format_validation_feedback, validate_schema
 
 MAX_SCHEMA_ATTEMPTS = 3
 MAX_RETRY_FEEDBACK_ISSUES = 12

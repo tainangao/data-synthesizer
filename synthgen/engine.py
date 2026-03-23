@@ -5,7 +5,7 @@ import time
 from faker import Faker
 
 from .relationship_rules import build_relationship_context, value_matches
-from .schema_utils import pk_column, table_counts, table_order
+from synthgen.gen_schema.schema_utils import pk_column, table_counts, table_order
 from .values import (
     apply_nullable,
     non_key_value,
