@@ -1,9 +1,16 @@
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
 from synthgen.gen_schema.gemini_client import GeminiClient
-from synthgen.gen_schema.schema_validator import format_validation_feedback, validate_schema
+from synthgen.gen_schema.schema_validator import (
+    format_validation_feedback,
+    validate_schema,
+)
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 MAX_SCHEMA_ATTEMPTS = 3
 MAX_RETRY_FEEDBACK_ISSUES = 12
@@ -175,23 +182,26 @@ def gen_schema_with_request(
             "data_formats": data_formats,
         },
     }
-    
+
     # Save the request for reference
     outdir = Path(out_dir)
     outdir.mkdir(parents=True, exist_ok=True)
-    
+
     request_path = outdir / "data_generation_request.json"
     with request_path.open("w") as f:
         json.dump(request, f, indent=2)
-    
+    logger.info(f"Saved data generation request to {request_path}")
+
     schema_path = outdir / "json_schema.json"
     with schema_path.open("w") as f:
         json.dump(schema, f, indent=2)
-        
+    logger.info(f"Saved generated schema to {schema_path}")
+
     validation_report_path = outdir / "schema_validation_report.json"
     with validation_report_path.open("w") as f:
         json.dump(generated["validation_report"], f, indent=2)
-    
+    logger.info(f"Saved validation report to {validation_report_path}")
+
     return {
         "schema": schema,
         "validation_report": generated["validation_report"],
@@ -277,3 +287,14 @@ def _parse_json(raw: str) -> dict:
         return json.loads(text[start : end + 1])
 
     raise ValueError("Model output is not valid JSON")
+
+
+if __name__ == "__main__":
+    gen_schema_with_request(
+        user_prompt="credit risk",
+        max_attempts=3,
+        records=10,
+        seed=74,
+        out_dir="output/synthetic/credit_risk_10_records",
+        data_formats=["csv"],
+    )

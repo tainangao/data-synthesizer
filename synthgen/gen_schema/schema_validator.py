@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from .schema_models import SchemaModel
+from synthgen.gen_schema.schema_models import SchemaModel
 
 MIN_TABLE_COUNT = 3
 REQUIRED_FIELD_ROLES = ("numerical", "categorical", "semi_structured")
