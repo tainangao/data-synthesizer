@@ -4,6 +4,7 @@ import time
 
 from faker import Faker
 
+from .relationship_rules import build_relationship_context, value_matches
 from .schema_utils import pk_column, table_counts, table_order
 from .values import (
     apply_nullable,
@@ -34,6 +35,7 @@ def generate_data(
         "pk_values": defaultdict(list),
         "pk_profiles": defaultdict(dict),
         "categorical_options": {},
+        "relationship_context": build_relationship_context(schema),
     }
     metrics = {
         "null_counts": Counter(),
@@ -42,6 +44,10 @@ def generate_data(
             lambda: {"count": 0, "sum": 0.0, "min": None, "max": None}
         ),
         "fk_stats": defaultdict(lambda: {"rows": 0, "nulls": 0, "invalid": 0}),
+        "fk_child_counts": defaultdict(Counter),
+        "relationship_checks": defaultdict(
+            lambda: {"rule": "", "rows": 0, "aligned": 0, "nulls": 0}
+        ),
         "table_performance": {},
     }
     summary: dict[str, int] = {}
@@ -82,6 +88,7 @@ def generate_data(
                     if not col.get("nullable", True):
                         metrics["fk_stats"][metric_key]["invalid"] += 1
                 else:
+                    metrics["fk_child_counts"][metric_key][chosen] += 1
                     parent_profile = (
                         state["pk_profiles"].get(parent_table, {}).get(chosen)
                     )
@@ -92,7 +99,7 @@ def generate_data(
                 col_name = col["name"]
                 if col_name in row:
                     continue
-                value = non_key_value(
+                value, relationship_info = non_key_value(
                     fake=fake,
                     table_name=table_name,
                     col=col,
@@ -100,7 +107,24 @@ def generate_data(
                     parent_profiles=parent_profiles,
                     state=state,
                 )
-                row[col_name] = apply_nullable(col, value)
+                final_value = apply_nullable(col, value)
+                row[col_name] = final_value
+
+                if relationship_info is not None:
+                    metric_key = f"{table_name}.{col_name}"
+                    relation_stats = metrics["relationship_checks"][metric_key]
+                    relation_stats["rule"] = str(
+                        relationship_info.get("rule") or relation_stats["rule"]
+                    )
+                    relation_stats["rows"] += 1
+
+                    if final_value is None:
+                        relation_stats["nulls"] += 1
+                    elif value_matches(
+                        final_value,
+                        relationship_info.get("expected_value"),
+                    ):
+                        relation_stats["aligned"] += 1
 
             for writer in writers:
                 writer.write_row(row)

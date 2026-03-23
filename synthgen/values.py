@@ -4,6 +4,7 @@ import random
 from faker import Faker
 
 from .common import parse_datetime, random_datetime, safe_name, tokens
+from .relationship_rules import conditioned_relationship_value
 
 
 def apply_nullable(col: dict, value: object) -> object:
@@ -224,25 +225,37 @@ def non_key_value(
     row: dict,
     parent_profiles: list[dict],
     state: dict,
-) -> object:
+) -> tuple[object, dict | None]:
     col_name = col["name"]
     dtype = str(col.get("type", "TEXT")).upper()
     role = str(col.get("field_role", "")).lower()
 
+    relationship_value = conditioned_relationship_value(
+        table_name=table_name,
+        col=col,
+        parent_profiles=parent_profiles,
+        context=state.get("relationship_context", {}),
+    )
+    if relationship_value is not None:
+        return relationship_value["value"], relationship_value
+
     inherited = _inherit_from_parent(col_name, parent_profiles)
     if inherited is not None and role in {"categorical", "text", "temporal"}:
-        return inherited
+        return inherited, {
+            "rule": "token_overlap_copy",
+            "expected_value": inherited,
+        }
 
     if dtype == "BOOLEAN" or role == "boolean":
-        return random.random() < 0.8
+        return random.random() < 0.8, None
 
     if dtype in {"INTEGER", "NUMERIC", "REAL"} or role == "numerical":
-        return _numeric_value(col_name, dtype)
+        return _numeric_value(col_name, dtype), None
 
     if dtype == "DATE" or (role == "temporal" and dtype != "TIMESTAMP"):
         col_tokens = tokens(col_name)
         if col_tokens & {"birth", "dob"}:
-            return fake.date_of_birth(minimum_age=18, maximum_age=85).isoformat()
+            return fake.date_of_birth(minimum_age=18, maximum_age=85).isoformat(), None
         anchor = _find_temporal_anchor(row, parent_profiles)
         if (
             col_tokens
@@ -261,20 +274,20 @@ def non_key_value(
             start = anchor
         else:
             start = datetime.now() - timedelta(days=3650)
-        return random_datetime(start, datetime.now()).date().isoformat()
+        return random_datetime(start, datetime.now()).date().isoformat(), None
 
     if dtype == "TIMESTAMP":
         anchor = _find_temporal_anchor(row, parent_profiles)
         start = anchor or (datetime.now() - timedelta(days=1000))
         return random_datetime(start, datetime.now()).isoformat(
             sep=" ", timespec="seconds"
-        )
+        ), None
 
     if dtype == "JSON" or role == "semi_structured":
-        return _json_value(fake, col_name)
+        return _json_value(fake, col_name), None
 
     if dtype == "XML":
-        return _xml_value(fake, col_name)
+        return _xml_value(fake, col_name), None
 
     if role == "categorical":
         cache_key = (table_name, col_name)
@@ -283,12 +296,12 @@ def non_key_value(
                 table_name, col_name
             )
         options, weights = state["categorical_options"][cache_key]
-        return random.choices(options, weights=weights, k=1)[0]
+        return random.choices(options, weights=weights, k=1)[0], None
 
     if role == "identifier":
-        return str(random.randint(10**7, 10**11 - 1))
+        return str(random.randint(10**7, 10**11 - 1)), None
 
-    return _text_value(fake, col_name)
+    return _text_value(fake, col_name), None
 
 
 def pk_value(table_name: str, col: dict, index: int) -> object:

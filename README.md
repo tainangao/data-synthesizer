@@ -122,6 +122,12 @@ In `out_dir` (default: `output/synthetic`):
 - `quality_report.json`
 - `performance_report.json`
 
+`quality_report.json` includes relationship diagnostics beyond FK validity:
+
+- `fk_integrity` (valid/null/invalid FK rates)
+- `parent_child_distribution` (children-per-parent stats for each FK)
+- `parent_child_consistency` and `relationship_rule_summary` (rule-driven parent-child consistency)
+
 ## Notes
 
 - Schema and pipeline generation retries up to 3 times with validation feedback.

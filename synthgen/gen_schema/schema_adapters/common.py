@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..common import tokens
+from synthgen.common import tokens
 
 CANONICAL_TYPES = {
     "TEXT",

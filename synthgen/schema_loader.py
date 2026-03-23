@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .schema_adapters import (
+from synthgen.gen_schema.schema_adapters import (
     load_delta_schema,
     load_json_schema,
     load_parquet_schema,

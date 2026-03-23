@@ -124,8 +124,10 @@ Dependency evidence: `pyproject.toml` includes `faker`, `pydantic`, `google-gena
 - Parent tables are generated before child tables using FK dependency ordering (`table_order`).
 - Child FK values are selected from real generated parent keys (`sample_parent_key`).
 - Parent profiles are propagated to child generation context to preserve cross-table consistency (`profile_for_parent`, `_inherit_from_parent`).
+- Rule-based relationship conditioning further aligns child attributes from parent context (for example currency/status/type/risk), with per-domain defaults for CRM/trading/credit-risk (`synthgen/relationship_rules.py`).
 - SQLite output enables FK constraints at runtime (`PRAGMA foreign_keys = ON`).
 - Quality report explicitly tracks FK validity (`fk_integrity`) and reports invalid counts.
+- Quality report also measures parent-child distribution shape via `parent_child_distribution` (children-per-parent avg/max/p95) and rule-level consistency via `parent_child_consistency`.
 
 ### Distribution realism
 
@@ -138,4 +140,5 @@ Dependency evidence: `pyproject.toml` includes `faker`, `pydantic`, `google-gena
 ### Observable evidence in sample outputs
 
 - `output/synthetic/quality_report.json` shows FK `valid_rate` of `1.0` for all FK columns in the sample run.
+- The same report includes parent-child distribution metrics (`avg_children_per_parent`, `max_children_per_parent`, `p95_children_per_parent`) per FK column.
 - The same report captures categorical frequencies (for example `Customers.customer_status`, `Orders.side`) and numeric summaries (`min`, `max`, `avg`) per column.
