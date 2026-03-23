@@ -17,7 +17,7 @@ PSQL_ALIASES = {"psql", "postgres", "postgresql"}
 
 def convert_schema(
     schema: dict,
-    out_dir: str,
+    out_dir: str | Path,
     export_formats: list[str],
 ):
     output_root = Path(out_dir)

@@ -1,6 +1,8 @@
 from collections import Counter, defaultdict
+import json
 import random
 import time
+from pathlib import Path
 
 from faker import Faker
 
@@ -16,12 +18,31 @@ from .values import (
 )
 
 
+def _serialize_metrics(metrics: dict) -> dict:
+    """Convert metrics to JSON-serializable format."""
+    result = {}
+    for key, value in metrics.items():
+        if isinstance(value, Counter):
+            result[key] = dict(value)
+        elif isinstance(value, defaultdict):
+            result[key] = {
+                k: dict(v) if isinstance(v, (Counter, defaultdict)) else v
+                for k, v in value.items()
+            }
+        elif isinstance(value, dict):
+            result[key] = _serialize_metrics(value)
+        else:
+            result[key] = value
+    return result
+
+
 def generate_data(
     schema: dict,
     records: int,
     seed: int,
     writers: list[object],
     order: list[str] | None = None,
+    out_dir: Path | None = None,
 ) -> tuple[dict, dict]:
     """Generate synthetic data for every table in the schema.
 
@@ -87,7 +108,7 @@ def generate_data(
                 # PK generation is deterministic by table/type/index.
                 # By default use i as the PK value, but this can be overridden by pk_value() for more complex strategies.
                 row[pk_col["name"]] = pk_value(table_name, pk_col, i)
-            
+
             # Handle FKs
             for col in columns:
                 if col.get("primary_key"):
@@ -183,5 +204,19 @@ def generate_data(
             if table_elapsed > 0
             else None,
         }
+
+    if out_dir is not None:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "summary.json").write_text(
+            json.dumps(summary, indent=2), encoding="utf-8"
+        )
+        (out_dir / "metrics.json").write_text(
+            json.dumps(
+                {"summary": summary, "metrics": _serialize_metrics(metrics)},
+                indent=2,
+                default=str,
+            ),
+            encoding="utf-8",
+        )
 
     return summary, metrics
