@@ -3,7 +3,7 @@ import xml.etree.ElementTree as ET
 
 from faker import Faker
 
-from src.gen_data.values import non_key_value
+from src.gen_data.value_generators import non_key_value
 
 
 class NonKeyValueXmlTests(unittest.TestCase):

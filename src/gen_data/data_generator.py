@@ -8,13 +8,13 @@ from faker import Faker
 
 from .relationship_rules import build_relationship_context, value_matches
 from src.gen_schema.schema_utils import pk_column, table_counts, table_order
-from .values import (
+from .metrics_collector import update_metrics
+from .value_generators import (
     apply_nullable,
     non_key_value,
     pk_value,
     profile_for_parent,
     sample_parent_key,
-    update_metrics,
 )
 
 
