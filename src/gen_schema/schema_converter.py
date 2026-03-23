@@ -271,10 +271,9 @@ def _write_delta_artifacts(schema: dict[str, Any], out_dir: Path) -> dict[str, A
 
 
 if __name__ == "__main__":
-    f_sch = "/Users/jacquelinewong/Documents/GitHub/data-synthesizer/output/synthetic/credit_risk_10_records/schema.json"
-    # read f_sch into dict
     import json
 
+    f_sch = "/Users/jacquelinewong/Documents/GitHub/data-synthesizer/output/synthetic/credit_risk_10_records/schema.json"
     with open(f_sch, "r", encoding="utf-8") as f:
         schema_dict = json.load(f)
 
