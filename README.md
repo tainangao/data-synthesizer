@@ -88,6 +88,3 @@ Reference artifacts:
 1. `uv sync`
 2. Add `.env` with `GEMINI_API_KEY=...` (optional `GEMINI_MODEL=...`)
 3. `uv run python main.py`
-
-Default outputs are written under `output/yolo/`.  
-I will keep adding or refreshing sample generated datasets under `demo_output/` for submission demos.
