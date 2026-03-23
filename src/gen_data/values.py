@@ -283,11 +283,11 @@ def non_key_value(
             sep=" ", timespec="seconds"
         ), None
 
-    if dtype == "JSON" or role == "semi_structured":
-        return _json_value(fake, col_name), None
-
     if dtype == "XML":
         return _xml_value(fake, col_name), None
+
+    if dtype == "JSON" or role == "semi_structured":
+        return _json_value(fake, col_name), None
 
     if role == "categorical":
         cache_key = (table_name, col_name)
