@@ -18,6 +18,18 @@ from .values import (
 )
 
 
+def _to_jsonable(value: object) -> object:
+    if isinstance(value, Counter):
+        return dict(value)
+    if isinstance(value, defaultdict):
+        return {k: _to_jsonable(v) for k, v in value.items()}
+    if isinstance(value, dict):
+        return {k: _to_jsonable(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_to_jsonable(v) for v in value]
+    return value
+
+
 def generate_data(
     schema: dict,
     records: int,
@@ -25,9 +37,13 @@ def generate_data(
     writers: list[object],
     order: list[str] | None = None,
     out_dir: Path | None = None,
+    stress_mode: bool = False,
 ) -> tuple[dict, dict]:
     """Generate synthetic data for every table in the schema.
 
+    Args:
+        stress_mode: If True, skips expensive metrics (fk_child_counts, relationship_checks)
+                     for better performance on large datasets.
     Returns:
         A tuple of:
         - summary: row count generated per table
@@ -52,19 +68,21 @@ def generate_data(
     }
 
     # Metrics used by reporting.py to build quality and performance reports.
-    metrics = {
+    # In stress_mode, skip expensive per-parent-child counts and relationship tracking.
+    metrics: dict = {
         "null_counts": Counter(),
         "categorical_counts": defaultdict(Counter),
         "numeric_stats": defaultdict(
             lambda: {"count": 0, "sum": 0.0, "min": None, "max": None}
         ),
         "fk_stats": defaultdict(lambda: {"rows": 0, "nulls": 0, "invalid": 0}),
-        "fk_child_counts": defaultdict(Counter),
-        "relationship_checks": defaultdict(
-            lambda: {"rule": "", "rows": 0, "aligned": 0, "nulls": 0}
-        ),
         "table_performance": {},
     }
+    if not stress_mode:
+        metrics["fk_child_counts"] = defaultdict(Counter)
+        metrics["relationship_checks"] = defaultdict(
+            lambda: {"rule": "", "rows": 0, "aligned": 0, "nulls": 0}
+        )
     summary: dict[str, int] = {}
 
     for table_name in generation_order:
@@ -113,7 +131,8 @@ def generate_data(
                     if not col.get("nullable", True):
                         metrics["fk_stats"][metric_key]["invalid"] += 1
                 else:
-                    metrics["fk_child_counts"][metric_key][chosen] += 1
+                    if "fk_child_counts" in metrics:
+                        metrics["fk_child_counts"][metric_key][chosen] += 1
                     # Parent profiles enable child attribute alignment (status/type/etc).
                     parent_profile = (
                         state["pk_profiles"].get(parent_table, {}).get(chosen)
@@ -140,7 +159,7 @@ def generate_data(
                 final_value = apply_nullable(col, value)
                 row[col_name] = final_value
 
-                if relationship_info is not None:
+                if relationship_info is not None and "relationship_checks" in metrics:
                     # Measure whether relationship-conditioned values align as expected.
                     metric_key = f"{table_name}.{col_name}"
                     relation_stats = metrics["relationship_checks"][metric_key]
@@ -193,7 +212,11 @@ def generate_data(
             json.dumps(summary, indent=2), encoding="utf-8"
         )
         (out_dir / "metrics.json").write_text(
-            json.dumps(metrics, indent=2), encoding="utf-8"
+            json.dumps(
+                {"summary": summary, "metrics": _to_jsonable(metrics)},
+                indent=2,
+            ),
+            encoding="utf-8",
         )
 
     return summary, metrics
