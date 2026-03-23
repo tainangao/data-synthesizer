@@ -1,6 +1,6 @@
 import random
 
-from .common import safe_name, tokens
+from synthgen.common import safe_name, tokens
 
 DOMAIN_KEYWORDS = {
     "crm": {

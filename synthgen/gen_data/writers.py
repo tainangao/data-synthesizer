@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import sqlite3
 
-from .common import safe_name
+from synthgen.common import safe_name
 
 
 def serialize_cell(value: object) -> object:

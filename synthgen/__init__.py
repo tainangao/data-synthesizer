@@ -1,4 +1,3 @@
-from .engine import generate_data
-from .reporting import build_quality_report
+from synthgen.gen_data.engine import generate_data
 
 __all__ = ["generate_data", "build_quality_report"]

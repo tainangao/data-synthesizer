@@ -3,7 +3,7 @@ import random
 
 from faker import Faker
 
-from .common import parse_datetime, random_datetime, safe_name, tokens
+from synthgen.common import parse_datetime, random_datetime, safe_name, tokens
 from .relationship_rules import conditioned_relationship_value
 
 
