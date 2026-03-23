@@ -22,6 +22,29 @@ def apply_nullable(col: dict, value: object) -> object:
     return value
 
 
+SEMANTIC_TOKEN_GROUPS: tuple[set[str], ...] = (
+    {"type"},
+    {"status", "state"},
+    {"segment"},
+    {"risk", "rating", "tier"},
+    {"currency"},
+    {"country"},
+    {"date", "time", "timestamp"},
+)
+
+
+def _tokens_semantically_compatible(
+    target_tokens: set[str], candidate_tokens: set[str]
+) -> bool:
+    # Prevent cross-domain inheritance when names share generic tokens only.
+    # Example bug we want to avoid: loan_type inheriting loan_purpose_* just
+    # because both include the token "loan".
+    for group in SEMANTIC_TOKEN_GROUPS:
+        if target_tokens & group and not candidate_tokens & group:
+            return False
+    return True
+
+
 def _find_temporal_anchor(row: dict, parent_profiles: list[dict]) -> datetime | None:
     anchor_tokens = {
         "open",
@@ -108,7 +131,17 @@ def _inherit_from_parent(col_name: str, parent_profiles: list[dict]) -> object |
         for key, value in profile.items():
             if value is None:
                 continue
-            score = len(target_tokens & tokens(key))
+
+            key_tokens = tokens(key)
+            # Require semantic compatibility (type->type, status->status, etc.)
+            # before considering token-overlap inheritance.
+            if not _tokens_semantically_compatible(target_tokens, key_tokens):
+                continue
+
+            score = len(target_tokens & key_tokens)
+            if score == 0:
+                continue
+
             if score > best_score:
                 best_score = score
                 best_value = value
