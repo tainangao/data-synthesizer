@@ -87,7 +87,7 @@ def generate_schema(user_prompt: str,
                     out_dir: str | Path = "output") -> dict:
     result = gen_schema_with_validation(user_prompt, max_attempts=max_attempts)
     
-    validation_report_path = outdir / "schema_validation_report.json"
+    validation_report_path = out_dir / "schema_validation_report.json"
     with validation_report_path.open("w") as f:
         json.dump(result["validation_report"], f, indent=2)
     logger.info(f"Saved validation report to {validation_report_path}")
