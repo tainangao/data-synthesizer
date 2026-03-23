@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from synthgen.common import tokens
+from src.common import tokens
 
 
 def pk_column(table: dict) -> dict | None:
