@@ -81,8 +81,24 @@ class SchemaGenerationError(RuntimeError):
         self.validation_report = validation_report
 
 
-def gen_schema(user_prompt: str, *, max_attempts: int = MAX_SCHEMA_ATTEMPTS) -> dict:
+def generate_schema(user_prompt: str, 
+                    *, 
+                    max_attempts: int = MAX_SCHEMA_ATTEMPTS, 
+                    out_dir: str | Path = "output") -> dict:
     result = gen_schema_with_validation(user_prompt, max_attempts=max_attempts)
+    
+    validation_report_path = outdir / "schema_validation_report.json"
+    with validation_report_path.open("w") as f:
+        json.dump(result["validation_report"], f, indent=2)
+    logger.info(f"Saved validation report to {validation_report_path}")
+    
+    outdir = Path(out_dir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    schema_path = outdir / "schema.json"
+    with schema_path.open("w") as f:
+        json.dump(result["schema"], f, indent=2)
+    logger.info(f"Saved generated schema to {schema_path}")
+
     return result["schema"]
 
 
@@ -159,54 +175,6 @@ def gen_schema_with_validation(
         f"Failed to generate a valid schema after {max_attempts} attempts.",
         validation_report=report,
     )
-
-
-def gen_schema_with_request(
-    user_prompt: str,
-    *,
-    max_attempts: int = MAX_SCHEMA_ATTEMPTS,
-    records: int = 500,
-    seed: int = 42,
-    out_dir: str = "output/synthetic",
-    data_formats: list[str] | None = None,
-) -> dict:
-    generated = gen_schema_with_validation(user_prompt, max_attempts=max_attempts)
-    schema = generated["schema"]
-    request = {
-        "kind": "data_generation_request",
-        "schema": schema,
-        "generation": {
-            "records": records,
-            "seed": seed,
-            "out_dir": out_dir,
-            "data_formats": data_formats,
-        },
-    }
-
-    # Save the request for reference
-    outdir = Path(out_dir)
-    outdir.mkdir(parents=True, exist_ok=True)
-
-    request_path = outdir / "data_generation_request.json"
-    with request_path.open("w") as f:
-        json.dump(request, f, indent=2)
-    logger.info(f"Saved data generation request to {request_path}")
-
-    schema_path = outdir / "schema.json"
-    with schema_path.open("w") as f:
-        json.dump(schema, f, indent=2)
-    logger.info(f"Saved generated schema to {schema_path}")
-
-    validation_report_path = outdir / "schema_validation_report.json"
-    with validation_report_path.open("w") as f:
-        json.dump(generated["validation_report"], f, indent=2)
-    logger.info(f"Saved validation report to {validation_report_path}")
-
-    return {
-        "schema": schema,
-        "validation_report": generated["validation_report"],
-        "data_generation_request": request,
-    }
 
 
 def _build_retry_prompt(
