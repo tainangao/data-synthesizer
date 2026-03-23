@@ -40,8 +40,11 @@ def convert_schema(
         _log_artifact_paths("parquet", sch_parquet)
 
     if "delta" in normalized_formats:
-        sch_delta = _write_delta_artifacts(schema, output_root / "delta")
-        _log_artifact_paths("delta", sch_delta)
+        try:
+            sch_delta = _write_delta_artifacts(schema, output_root / "delta")
+            _log_artifact_paths("delta", sch_delta)
+        except Exception as e:
+            logger.warning("Delta export failed (skipping): %s", e)
 
 
 def _log_artifact_paths(format_name: str, artifacts: dict[str, Any]) -> None:
@@ -259,6 +262,14 @@ def _write_delta_artifacts(schema: dict[str, Any], out_dir: Path) -> dict[str, A
         raise RuntimeError("Delta export requires the 'deltalake' package.") from exc
 
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Remove any existing delta tables to avoid schema mismatch on overwrite
+    for item in out_dir.iterdir():
+        if item.is_dir():
+            import shutil
+
+            shutil.rmtree(item)
+
     table_paths: dict[str, str] = {}
     for table in schema["tables"]:
         table_name = table["name"]
