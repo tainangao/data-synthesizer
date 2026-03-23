@@ -1,5 +1,5 @@
 import json
-
+from pathlib import Path
 from typing import Any
 
 from synthgen.gen_schema.gemini_client import GeminiClient
@@ -154,33 +154,6 @@ def gen_schema_with_validation(
     )
 
 
-def build_data_generation_request(
-    schema: dict,
-    *,
-    records: int = 500,
-    seed: int = 42,
-    out_dir: str = "output/synthetic",
-    formats: list[str] | None = None,
-    sqlite_path: str | None = None,
-    perf_report_out: str | None = None,
-    schema_path: str | None = None,
-) -> dict:
-    chosen_formats = formats or ["csv", "sqlite"]
-    return {
-        "kind": "data_generation_request",
-        "schema_path": schema_path,
-        "schema": schema,
-        "generation": {
-            "records": records,
-            "seed": seed,
-            "out_dir": out_dir,
-            "formats": chosen_formats,
-            "sqlite_path": sqlite_path,
-            "perf_report_out": perf_report_out,
-        },
-    }
-
-
 def gen_schema_with_request(
     user_prompt: str,
     *,
@@ -188,23 +161,37 @@ def gen_schema_with_request(
     records: int = 500,
     seed: int = 42,
     out_dir: str = "output/synthetic",
-    formats: list[str] | None = None,
-    sqlite_path: str | None = None,
-    perf_report_out: str | None = None,
-    schema_path: str | None = None,
+    data_formats: list[str] | None = None,
 ) -> dict:
     generated = gen_schema_with_validation(user_prompt, max_attempts=max_attempts)
     schema = generated["schema"]
-    request = build_data_generation_request(
-        schema,
-        records=records,
-        seed=seed,
-        out_dir=out_dir,
-        formats=formats,
-        sqlite_path=sqlite_path,
-        perf_report_out=perf_report_out,
-        schema_path=schema_path,
-    )
+    request = {
+        "kind": "data_generation_request",
+        "schema": schema,
+        "generation": {
+            "records": records,
+            "seed": seed,
+            "out_dir": out_dir,
+            "data_formats": data_formats,
+        },
+    }
+    
+    # Save the request for reference
+    outdir = Path(out_dir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    
+    request_path = outdir / "data_generation_request.json"
+    with request_path.open("w") as f:
+        json.dump(request, f, indent=2)
+    
+    schema_path = outdir / "json_schema.json"
+    with schema_path.open("w") as f:
+        json.dump(schema, f, indent=2)
+        
+    validation_report_path = outdir / "schema_validation_report.json"
+    with validation_report_path.open("w") as f:
+        json.dump(generated["validation_report"], f, indent=2)
+    
     return {
         "schema": schema,
         "validation_report": generated["validation_report"],
