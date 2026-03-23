@@ -82,10 +82,13 @@ def generate_data(
             row: dict[str, object] = {}
             parent_profiles: list[dict] = []
 
+            # Handle PK
             if pk_col is not None:
                 # PK generation is deterministic by table/type/index.
+                # By default use i as the PK value, but this can be overridden by pk_value() for more complex strategies.
                 row[pk_col["name"]] = pk_value(table_name, pk_col, i)
-
+            
+            # Handle FKs
             for col in columns:
                 if col.get("primary_key"):
                     continue
