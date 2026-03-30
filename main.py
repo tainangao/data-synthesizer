@@ -2,13 +2,9 @@ from pathlib import Path
 import logging
 
 from src.gen_schema import generate_schema, convert_schema, table_order
-from src.gen_config import (
-    generate_data,
-    CSVWriter,
-    SQLiteWriter,
-    ParquetWriter,
-    DeltaWriter,
-)
+from src.gen_config import translate_and_validate
+from src.gen_data import generate_data
+from src.gen_data.data_writers import CSVWriter, SQLiteWriter, ParquetWriter, DeltaWriter
 from src.utils.reporting import build_quality_report
 
 logging.basicConfig(level=logging.INFO)
@@ -37,6 +33,18 @@ def main():
         export_formats=["sqlite", "psql", "parquet", "delta"],
     )
 
+    # Generate config from schema
+    config, errors = translate_and_validate(
+        schema=schema,
+        base_records=RECORD_COUNT,
+        seed=SEED,
+        output_path=OP_DIR / "config.json"
+    )
+
+    if errors:
+        logger.error(f"Config validation errors: {errors}")
+        return
+
     generation_order = table_order(schema)
 
     csv_writer = CSVWriter(OP_DIR / "csv")
@@ -50,24 +58,23 @@ def main():
     delta_writer = DeltaWriter(OP_DIR / "delta", chunk_size=PARQUET_CHUNK_SIZE)
     writers = [csv_writer, sqlite_writer, parquet_writer, delta_writer]
 
-    summary, metrics = generate_data(
+    row_counts = generate_data(
         schema=schema,
-        records=RECORD_COUNT,
-        seed=SEED,
+        config=config,
         writers=writers,
-        order=generation_order,
-        out_dir=OP_DIR,
-        stress_mode=STRESS_MODE,
-    )
-    logger.info(f"\nData generation summary: {summary}")
-
-    report = build_quality_report(
-        schema=schema,
-        summary=summary,
-        metrics=metrics,
         seed=SEED,
-        out_dir=OP_DIR,
     )
+
+    logger.info(f"\nData generation complete: {row_counts}")
+
+    # TODO: Update reporting to work with new gen_data
+    # report = build_quality_report(
+    #     schema=schema,
+    #     summary=summary,
+    #     metrics=metrics,
+    #     seed=SEED,
+    #     out_dir=OP_DIR,
+    # )
 
 
 if __name__ == "__main__":
