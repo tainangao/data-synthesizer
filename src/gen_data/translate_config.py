@@ -145,7 +145,7 @@ def translate_schema_to_config(
     """
     # Load business logic
     if logic_file is None:
-        logic_file = Path(__file__).parent.parent.parent / "biz_logic" / "logic2.md"
+        logic_file = Path(__file__).parent / "business_logic.md"
 
     logic_content = logic_file.read_text(encoding="utf-8") if logic_file.exists() else ""
 
