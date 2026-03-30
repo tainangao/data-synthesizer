@@ -6,121 +6,178 @@ from pathlib import Path
 from src.gen_schema.schema_utils import table_order, table_counts
 from src.utils.gemini_client import GeminiClient
 from .config_validator import validate_config
+from .behavioral_mapping import BehavioralMapping
 
 MAX_CONFIG_ATTEMPTS = 3
 
 
 def _build_system_prompt(logic_content: str) -> str:
-    """Build system prompt for config translation."""
-    return f"""You are a synthetic data configuration generator. Your task is to convert a JSON schema into a scenario configuration that drives a simulation engine.
+    """Build system prompt for behavioral mapping."""
+    return f"""You are a behavioral mapping generator for synthetic data simulation.
 
 # Business Logic Reference
 {logic_content}
 
 # Your Task
-Given a JSON schema with tables and columns, produce a valid scenario_config.json that:
-1. Identifies entity types (customers, accounts, loans, orders, etc.)
-2. Maps entities to lifecycle state machines based on the business logic above
-3. Defines event tables (transactions, interactions, repayments) emitted by entities
-4. Sets up feature-conditional transitions (e.g., credit score affects default probability)
-5. Applies temporal constraints and balance rules
+Given a JSON schema, identify the business scenario and produce a behavioral mapping with:
+1. State machines for entities with lifecycle states
+2. Event emission rules
+3. Constraints
+4. Key field distributions (only for behavioral drivers like credit_score, income, segment)
 
-# Config Structure
-Output ONLY valid JSON (no markdown fences, no prose) with this structure:
+# Output Format
+Output ONLY valid JSON (no markdown, no prose):
 {{
   "scenario_name": "string",
-  "seed": 42,
-  "simulation": {{
-    "start_date": "YYYY-MM-DD",
-    "end_date": "YYYY-MM-DD"
-  }},
-  "entities": {{
-    "<entity_name>": {{
-      "count": 1000,
-      "fields": {{
-        "<field_name>": {{
-          "distribution": "normal|lognormal|uniform|poisson|choice|constant|date_offset",
-          "params": {{}}
-        }}
-      }}
-    }}
-  }},
-  "state_machines": {{
-    "<entity_name>": {{
-      "state_field": "<field_name>",
-      "initial_state": "string",
-      "terminal_states": ["string"],
+  "start_date": "YYYY-MM-DD",
+  "end_date": "YYYY-MM-DD",
+  "state_machines": [
+    {{
+      "entity": "table_name",
+      "state_field": "status",
+      "initial_state": "Pending",
+      "terminal_states": ["Closed"],
       "transitions": {{
-        "<from_state>": {{
-          "<to_state>": {{
-            "base_prob": 0.0,
+        "Pending": [
+          {{
+            "to_state": "Active",
+            "base_prob": 0.85,
             "adjustments": [
-              {{
-                "field": "<field_name>",
-                "direction": "higher_increases|higher_decreases",
-                "strength": "weak|moderate|strong"
-              }}
+              {{"field": "credit_score", "direction": "higher_increases", "strength": "strong"}}
             ]
           }}
-        }}
-      }}
-    }}
-  }},
-  "events": {{
-    "<event_table_name>": {{
-      "emitted_by": "<entity_name>",
-      "emit_when_states": ["string"],
-      "frequency": {{
-        "distribution": "poisson",
-        "lambda_base": 1.0,
-        "lambda_modifiers": [
-          {{
-            "field": "<field_name>",
-            "effect": "higher_increases|higher_decreases"
-          }}
         ]
-      }},
-      "fields": {{
-        "<field_name>": {{
-          "distribution": "string",
-          "params": {{}}
-        }}
       }}
     }}
-  }},
+  ],
+  "events": [
+    {{
+      "event_table": "table_name",
+      "emitted_by": "entity_table",
+      "emit_when_states": ["Active"],
+      "lambda_base": 1.0,
+      "lambda_modifiers": [
+        {{"field": "income", "effect": "higher_increases"}}
+      ]
+    }}
+  ],
   "constraints": [
     {{
       "type": "temporal_order",
-      "fields": ["date_field_1", "date_field_2"]
-    }},
-    {{
-      "type": "no_events_after_terminal",
-      "entity": "<entity_name>",
-      "event_table": "<event_table_name>"
-    }},
-    {{
-      "type": "running_balance",
-      "credit_field": "<field_name>",
-      "debit_field": "<field_name>",
-      "balance_field": "<field_name>"
+      "params": {{"fields": ["date1", "date2"]}}
     }}
-  ]
+  ],
+  "key_distributions": {{
+    "Customers": {{
+      "credit_score": {{"distribution": "normal", "params": {{"mean": 650, "std": 100}}}},
+      "income": {{"distribution": "lognormal", "params": {{"mean": 60000, "sigma": 0.5}}}}
+    }}
+  }}
 }}
 
-# Distribution Parameters
-- normal: {{"mean": float, "std": float}}
-- lognormal: {{"mean": float, "sigma": float}}
-- uniform: {{"low": float, "high": float}}
-- poisson: {{"lambda": float}}
-- choice: {{"values": [any], "weights": [float]}}
-- constant: {{"value": any}}
-- date_offset: {{"min_days": int, "max_days": int}}
+Match patterns from business logic. Use realistic probabilities. Output JSON only."""
 
-# Important
-- Match scenario patterns from the business logic (CRM/Trading/Credit)
-- Use realistic transition probabilities from the reference matrices
-- Apply feature-based adjustments where appropriate
-- Output ONLY the JSON config, nothing else"""
+
+def _generate_behavioral_mapping(schema: dict, logic_content: str) -> BehavioralMapping:
+    """Generate behavioral mapping from schema using LLM."""
+    system_prompt = _build_system_prompt(logic_content)
+    user_prompt = f"Generate behavioral mapping for:\n\n{json.dumps(schema, indent=2)}"
+
+    client = GeminiClient()
+
+    for attempt in range(1, MAX_CONFIG_ATTEMPTS + 1):
+        try:
+            response = client.chat(user_prompt=user_prompt, system_prompt=system_prompt)
+
+            # Strip markdown fences
+            response = response.strip()
+            if response.startswith("```"):
+                lines = response.split("\n")
+                response = "\n".join(lines[1:-1]) if len(lines) > 2 else response
+                if response.startswith("json"):
+                    response = response[4:].strip()
+
+            mapping_dict = json.loads(response)
+            return BehavioralMapping(**mapping_dict)
+
+        except Exception as e:
+            if attempt < MAX_CONFIG_ATTEMPTS:
+                print(f"⚠️  Attempt {attempt} failed: {e}. Retrying...")
+                user_prompt = f"{user_prompt}\n\nPrevious attempt failed: {e}\n\nFix and output valid JSON only."
+            else:
+                raise ValueError(f"Failed after {MAX_CONFIG_ATTEMPTS} attempts: {e}")
+
+    raise ValueError("Unreachable")
+
+
+def _build_full_config(schema: dict, mapping: BehavioralMapping, base_records: int, seed: int) -> dict:
+    """Build full config from schema and behavioral mapping."""
+    # Get table order and counts
+    order = table_order(schema)
+    counts = table_counts(schema, order, base_records)
+
+    # Build entities from schema tables
+    entities = {}
+    for table in schema["tables"]:
+        table_name = table["name"]
+        entities[table_name] = {
+            "fields": mapping.key_distributions.get(table_name, {})
+        }
+
+    # Build state machines
+    state_machines = {}
+    for sm in mapping.state_machines:
+        transitions = {}
+        for from_state, to_list in sm.transitions.items():
+            transitions[from_state] = {}
+            for trans in to_list:
+                transitions[from_state][trans.to_state] = {
+                    "base_prob": trans.base_prob,
+                    "adjustments": trans.adjustments
+                }
+
+        state_machines[sm.entity] = {
+            "state_field": sm.state_field,
+            "initial_state": sm.initial_state,
+            "terminal_states": sm.terminal_states,
+            "transitions": transitions
+        }
+
+    # Build events
+    events = {}
+    for evt in mapping.events:
+        events[evt.event_table] = {
+            "emitted_by": evt.emitted_by,
+            "emit_when_states": evt.emit_when_states,
+            "frequency": {
+                "distribution": "poisson",
+                "lambda_base": evt.lambda_base,
+                "lambda_modifiers": evt.lambda_modifiers
+            },
+            "fields": {}
+        }
+
+    # Build constraints
+    constraints = []
+    for const in mapping.constraints:
+        constraint = {"type": const.type}
+        constraint.update(const.params)
+        constraints.append(constraint)
+
+    return {
+        "scenario_name": mapping.scenario_name,
+        "seed": seed,
+        "simulation": {
+            "start_date": mapping.start_date,
+            "end_date": mapping.end_date
+        },
+        "entities": entities,
+        "generation_order": order,
+        "table_counts": counts,
+        "state_machines": state_machines,
+        "events": events,
+        "constraints": constraints
+    }
 
 
 def translate_schema_to_config(
@@ -129,7 +186,7 @@ def translate_schema_to_config(
     seed: int = 42,
     logic_file: Path | None = None
 ) -> dict:
-    """Translate JSON schema to scenario config using LLM with retry logic.
+    """Translate JSON schema to scenario config.
 
     Args:
         schema: JSON schema from Part 1
@@ -139,9 +196,6 @@ def translate_schema_to_config(
 
     Returns:
         Scenario configuration dict
-
-    Raises:
-        ValueError: If config generation fails after MAX_CONFIG_ATTEMPTS
     """
     # Load business logic
     if logic_file is None:
@@ -149,53 +203,13 @@ def translate_schema_to_config(
 
     logic_content = logic_file.read_text(encoding="utf-8") if logic_file.exists() else ""
 
-    # Build prompts
-    system_prompt = _build_system_prompt(logic_content)
-    user_prompt = f"Convert this schema to a scenario config:\n\n{json.dumps(schema, indent=2)}"
+    # Generate behavioral mapping from LLM
+    mapping = _generate_behavioral_mapping(schema, logic_content)
 
-    client = GeminiClient()
-    last_error = None
+    # Build full config
+    config = _build_full_config(schema, mapping, base_records, seed)
 
-    for attempt in range(1, MAX_CONFIG_ATTEMPTS + 1):
-        try:
-            # Call LLM
-            response = client.chat(user_prompt=user_prompt, system_prompt=system_prompt)
-
-            # Parse response (strip markdown fences if present)
-            response = response.strip()
-            if response.startswith("```"):
-                lines = response.split("\n")
-                response = "\n".join(lines[1:-1]) if len(lines) > 2 else response
-                if response.startswith("json"):
-                    response = response[4:].strip()
-
-            config = json.loads(response)
-
-            # Add computed fields
-            config["seed"] = seed
-            order = table_order(schema)
-            config["generation_order"] = order
-            config["table_counts"] = table_counts(schema, order, base_records)
-
-            # Validate before returning
-            errors = validate_config(config)
-            if not errors:
-                return config
-
-            # If validation failed, add feedback to prompt for next attempt
-            last_error = f"Validation errors: {'; '.join(errors)}"
-            user_prompt = f"{user_prompt}\n\nPrevious attempt failed with errors:\n{last_error}\n\nPlease fix these issues."
-
-        except json.JSONDecodeError as e:
-            last_error = f"JSON parse error: {str(e)}"
-            user_prompt = f"{user_prompt}\n\nPrevious attempt returned invalid JSON: {str(e)}\n\nPlease output valid JSON only."
-        except Exception as e:
-            last_error = str(e)
-
-        if attempt < MAX_CONFIG_ATTEMPTS:
-            print(f"⚠️  Attempt {attempt} failed: {last_error}. Retrying...")
-
-    raise ValueError(f"Failed to generate valid config after {MAX_CONFIG_ATTEMPTS} attempts. Last error: {last_error}")
+    return config
 
 
 def save_config(config: dict, output_path: Path) -> None:
@@ -218,7 +232,8 @@ def translate_and_validate(
     config = translate_schema_to_config(schema, base_records, seed)
     errors = validate_config(config)
 
-    if output_path:
+    if output_path and not errors:
         save_config(config, output_path)
 
     return config, errors
+

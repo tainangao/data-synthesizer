@@ -5,15 +5,14 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class FieldDistribution(BaseModel):
-    """Field distribution configuration."""
-    distribution: Literal["normal", "lognormal", "uniform", "poisson", "choice", "constant", "date_offset"]
+    """Field distribution configuration for generating realistic data patterns."""
+    distribution: str  # e.g., "normal", "lognormal", "choice", "constant", "faker"
     params: dict[str, Any] = Field(default_factory=dict)
 
 
 class EntityDefinition(BaseModel):
-    """Entity definition with fields."""
-    count: int = Field(gt=0)
-    fields: dict[str, FieldDistribution]
+    """Entity definition with demographic/risk profile distributions."""
+    fields: dict[str, FieldDistribution] = Field(default_factory=dict)
 
 
 class TransitionAdjustment(BaseModel):
@@ -40,7 +39,7 @@ class StateMachine(BaseModel):
 class LambdaModifier(BaseModel):
     """Modifier for event frequency lambda."""
     field: str
-    effect: Literal["higher_increases", "higher_decreases"]
+    effect: str  # Allow any effect description
 
 
 class EventFrequency(BaseModel):
@@ -55,12 +54,12 @@ class EventDefinition(BaseModel):
     emitted_by: str
     emit_when_states: list[str]
     frequency: EventFrequency
-    fields: dict[str, FieldDistribution]
+    fields: dict[str, FieldDistribution] = Field(default_factory=dict)
 
 
 class Constraint(BaseModel):
     """Data constraint definition."""
-    type: Literal["temporal_order", "no_events_after_terminal", "running_balance"]
+    type: str  # Allow any constraint type
     fields: list[str] | None = None
     entity: str | None = None
     event_table: str | None = None
@@ -90,13 +89,14 @@ class ScenarioConfig(BaseModel):
     @field_validator("generation_order")
     @classmethod
     def validate_generation_order(cls, v, info):
-        """Ensure generation_order matches entity keys."""
+        """Ensure generation_order matches entity and event keys."""
         entities = info.data.get("entities", {})
-        entity_names = set(entities.keys())
+        events = info.data.get("events", {})
+        all_tables = set(entities.keys()) | set(events.keys())
         order_names = set(v)
-        if not order_names.issubset(entity_names):
-            extra = order_names - entity_names
-            raise ValueError(f"generation_order contains unknown entities: {extra}")
+        if not order_names.issubset(all_tables):
+            extra = order_names - all_tables
+            raise ValueError(f"generation_order contains unknown tables: {extra}")
         return v
 
 
