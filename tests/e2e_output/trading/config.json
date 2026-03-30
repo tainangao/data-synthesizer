@@ -6,9 +6,6 @@
     "end_date": "2026-03-30"
   },
   "entities": {
-    "Instruments": {
-      "fields": {}
-    },
     "Traders": {
       "fields": {
         "trader_type": {
@@ -22,6 +19,9 @@
           }
         }
       }
+    },
+    "Instruments": {
+      "fields": {}
     },
     "Orders": {
       "fields": {}
@@ -124,7 +124,7 @@
       "type": "temporal_order",
       "params": {
         "fields": [
-          "order_timestamp",
+          "placed_timestamp",
           "expiration_timestamp"
         ]
       }
@@ -133,17 +133,8 @@
       "type": "temporal_order",
       "params": {
         "fields": [
-          "execution_timestamp",
-          "settlement_date_expected"
-        ]
-      }
-    },
-    {
-      "type": "temporal_order",
-      "params": {
-        "fields": [
           "settlement_date",
-          "actual_settlement_date"
+          "actual_settlement_timestamp"
         ]
       }
     }

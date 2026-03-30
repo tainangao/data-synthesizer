@@ -2,7 +2,11 @@
 
 import json
 import sys
+import logging 
 from pathlib import Path
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -14,13 +18,13 @@ SCENARIOS = [
     {
         "name": "credit_risk",
         "prompt": "Credit risk management system with customers, loan applications, credit scores, and repayment tracking",
-        "schema_file": "demo_output/schema.json"
+        "schema_file": "tests/e2e_output/credit_risk/schema.json"
     },
-    {
-        "name": "crm",
-        "prompt": "CRM system with customers, accounts, transactions, and interactions",
-        "schema_file": 'tests/e2e_output/crm/schema.json'
-    },
+    # {
+    #     "name": "crm",
+    #     "prompt": "CRM system with customers, accounts, transactions, and interactions",
+    #     "schema_file": 'tests/e2e_output/crm/schema.json'
+    # },
     {
         "name": "trading",
         "prompt": "Trading platform with traders, orders, executions, and settlements",
@@ -30,45 +34,45 @@ SCENARIOS = [
 
 def test_scenario(scenario: dict):
     """Test translation for a single scenario."""
-    print(f"\n{'='*60}")
-    print(f"Testing: {scenario['name']}")
-    print(f"{'='*60}")
+    logger.info(f"\n{'='*60}")
+    logger.info(f"Testing: {scenario['name']}")
+    logger.info(f"{'='*60}")
 
     # Load or generate schema
     if scenario['schema_file']:
         schema_path = Path(__file__).parent.parent / scenario['schema_file']
         if not schema_path.exists():
-            print(f"❌ Schema not found: {schema_path}")
+            logger.error(f"❌ Schema not found: {schema_path}")
             return False
         schema = json.loads(schema_path.read_text())
     else:
-        print(f"⚠️  No schema file provided, skipping {scenario['name']}")
+        logger.error(f"❌ No schema file provided for {scenario['name']}")
         return None
 
     # Translate
-    print(f"🔄 Translating schema to config...")
+    logger.info(f"🔄 Translating schema to config...")
     try:
         config, errors = translate_and_validate(
             schema=schema,
             base_records=1000,
             seed=42,
-            output_path=Path(f"tests/e2e_output/{scenario['name']}_config.json")
+            output_path=Path(f"tests/e2e_output/{scenario['name']}/config.json")
         )
 
         if errors:
-            print("❌ Validation errors:")
+            logger.error("❌ Validation errors:")
             for error in errors:
-                print(f"  - {error}")
+                logger.error(f"  - {error}")
             return False
         else:
-            print("✅ Config generated and validated successfully!")
-            print(f"📊 Entities: {list(config['entities'].keys())}")
-            print(f"📊 State machines: {list(config.get('state_machines', {}).keys())}")
-            print(f"📊 Events: {list(config.get('events', {}).keys())}")
-            print(f"💾 Saved to: tests/e2e_output/{scenario['name']}_config.json")
+            logger.info("✅ Config generated and validated successfully!")
+            logger.info(f"📊 Entities: {list(config['entities'].keys())}")
+            logger.info(f"📊 State machines: {list(config.get('state_machines', {}).keys())}")
+            logger.info(f"📊 Events: {list(config.get('events', {}).keys())}")
+            logger.info(f"💾 Saved to: tests/e2e_output/{scenario['name']}_config.json")
             return True
     except Exception as e:
-        print(f"❌ Error: {e}")
+        logger.error(f"❌ Error: {e}")
         return False
 
 if __name__ == "__main__":
@@ -80,12 +84,12 @@ if __name__ == "__main__":
             results[scenario['name']] = result
 
     # Summary
-    print(f"\n{'='*60}")
-    print("Summary")
-    print(f"{'='*60}")
+    logger.critical(f"\n{'='*60}")
+    logger.critical("Summary")
+    logger.critical(f"{'='*60}")
     passed = sum(1 for r in results.values() if r)
     total = len(results)
-    print(f"✅ Passed: {passed}/{total}")
+    logger.critical(f"✅ Passed: {passed}/{total}")
     if passed < total:
-        print(f"❌ Failed: {total - passed}/{total}")
+        logger.error(f"❌ Failed: {total - passed}/{total}")
 

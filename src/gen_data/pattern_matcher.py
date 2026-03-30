@@ -59,14 +59,22 @@ def find_fk_relationships(schema: dict) -> dict[str, str]:
 
 def detect_event_tables(schema: dict, entity_table: str) -> list[str]:
     """Detect event tables by name patterns."""
-    event_patterns = ["transaction", "interaction", "payment", "repayment", "execution", "trade", "history"]
+    # These are event/fact table prefixes — must match a word segment, not a substring
+    # e.g. "TradeExecutions" matches "execution", not "trade" (which would match "Traders")
+    event_patterns = ["transaction", "interaction", "payment", "repayment", "execution", "settlement", "history"]
+    entity_patterns = ["trader", "customer", "instrument", "portfolio", "borrower", "account"]
     event_tables = []
 
     for table in schema["tables"]:
         table_name = table["name"]
-        if table_name != entity_table:
-            if any(pattern in table_name.lower() for pattern in event_patterns):
-                event_tables.append(table_name)
+        table_lower = table_name.lower()
+        if table_name == entity_table:
+            continue
+        # Skip tables that look like entity/master tables
+        if any(pattern in table_lower for pattern in entity_patterns):
+            continue
+        if any(pattern in table_lower for pattern in event_patterns):
+            event_tables.append(table_name)
 
     return event_tables
 
@@ -100,8 +108,10 @@ def build_crm_config(schema: dict) -> dict:
     constraints = []
     key_distributions = {}
 
-    # Find entity table with status for state machine
+    # Find entity table with status for state machine (prefer parent tables)
     entity_table = None
+    relationships = find_fk_relationships(schema)
+
     for table_name, table in tables.items():
         status_field = find_status_field(table)
         if status_field and table_name not in relationships:  # Parent table
@@ -164,13 +174,6 @@ def build_crm_config(schema: dict) -> dict:
         "events": events,
         "constraints": constraints,
         "key_distributions": key_distributions
-    }
-
-    return {
-        "state_machines": state_machines,
-        "events": events,
-        "constraints": constraints,
-        "key_distributions": {}
     }
 
 

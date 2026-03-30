@@ -24,19 +24,19 @@
         }
       }
     },
-    "CreditScores": {
-      "fields": {}
-    },
     "LoanApplications": {
       "fields": {}
     },
-    "LoanAccounts": {
+    "CreditScores": {
       "fields": {}
     },
-    "LoanPayments": {
+    "Loans": {
       "fields": {}
     },
-    "DelinquencyEvents": {
+    "LoanRepayments": {
+      "fields": {}
+    },
+    "Delinquencies": {
       "fields": {}
     }
   },
@@ -44,17 +44,17 @@
     "Customers",
     "CreditScores",
     "LoanApplications",
-    "LoanAccounts",
-    "DelinquencyEvents",
-    "LoanPayments"
+    "Loans",
+    "Delinquencies",
+    "LoanRepayments"
   ],
   "table_counts": {
     "Customers": 1000,
     "CreditScores": 1600,
     "LoanApplications": 1000,
-    "LoanAccounts": 1000,
-    "DelinquencyEvents": 1600,
-    "LoanPayments": 1600
+    "Loans": 1400,
+    "Delinquencies": 1600,
+    "LoanRepayments": 1600
   },
   "state_machines": {
     "LoanApplications": {
@@ -79,7 +79,7 @@
     }
   },
   "events": {
-    "LoanPayments": {
+    "LoanRepayments": {
       "emitted_by": "LoanApplications",
       "emit_when_states": [
         "Current",
@@ -99,7 +99,7 @@
       "params": {
         "fields": [
           "date_of_birth",
-          "onboarding_date"
+          "registration_date"
         ]
       }
     },
@@ -107,8 +107,17 @@
       "type": "temporal_order",
       "params": {
         "fields": [
-          "origination_date",
-          "next_payment_due_date"
+          "application_date",
+          "decision_date"
+        ]
+      }
+    },
+    {
+      "type": "temporal_order",
+      "params": {
+        "fields": [
+          "delinquency_start_date",
+          "last_update_date"
         ]
       }
     }
