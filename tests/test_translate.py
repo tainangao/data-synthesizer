@@ -19,7 +19,7 @@ SCENARIOS = [
     {
         "name": "crm",
         "prompt": "CRM system with customers, accounts, transactions, and interactions",
-        "schema_file": None  # Will generate on demand
+        "schema_file": 'tests/e2e_output/crm/schema.json'
     },
     {
         "name": "trading",
@@ -52,7 +52,7 @@ def test_scenario(scenario: dict):
             schema=schema,
             base_records=1000,
             seed=42,
-            output_path=Path(f"tests/demo_output/{scenario['name']}_config.json")
+            output_path=Path(f"tests/e2e_output/{scenario['name']}_config.json")
         )
 
         if errors:
@@ -65,7 +65,7 @@ def test_scenario(scenario: dict):
             print(f"📊 Entities: {list(config['entities'].keys())}")
             print(f"📊 State machines: {list(config.get('state_machines', {}).keys())}")
             print(f"📊 Events: {list(config.get('events', {}).keys())}")
-            print(f"💾 Saved to: tests/demo_output/{scenario['name']}_config.json")
+            print(f"💾 Saved to: tests/e2e_output/{scenario['name']}_config.json")
             return True
     except Exception as e:
         print(f"❌ Error: {e}")
