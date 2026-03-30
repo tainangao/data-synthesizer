@@ -5,7 +5,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Callable
 
-from utils.common import safe_name
+from src.utils.common import safe_name
 from src.gen_schema.schema_utils import table_order
 
 logging.basicConfig(level=logging.INFO)

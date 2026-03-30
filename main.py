@@ -9,7 +9,7 @@ from src.gen_data import (
     ParquetWriter,
     DeltaWriter,
 )
-from utils.reporting import build_quality_report
+from src.utils.reporting import build_quality_report
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

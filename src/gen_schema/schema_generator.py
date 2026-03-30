@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from utils.gemini_client import GeminiClient
+from src.utils.gemini_client import GeminiClient
 from src.gen_schema.schema_validator import (
     format_validation_feedback,
     validate_schema,
@@ -81,20 +81,22 @@ class SchemaGenerationError(RuntimeError):
         self.validation_report = validation_report
 
 
-def generate_schema(user_prompt: str, 
-                    *, 
-                    max_attempts: int = MAX_SCHEMA_ATTEMPTS, 
-                    out_dir: str | Path = "output") -> dict:
+def generate_schema(
+    user_prompt: str,
+    *,
+    max_attempts: int = MAX_SCHEMA_ATTEMPTS,
+    out_dir: str | Path = "output",
+) -> dict:
     result = gen_schema_with_validation(user_prompt, max_attempts=max_attempts)
-    
+
     outdir = Path(out_dir)
     outdir.mkdir(parents=True, exist_ok=True)
-    
+
     validation_report_path = outdir / "schema_validation_report.json"
     with validation_report_path.open("w") as f:
         json.dump(result["validation_report"], f, indent=2)
     logger.info(f"Saved validation report to {validation_report_path}")
-    
+
     schema_path = outdir / "schema.json"
     with schema_path.open("w") as f:
         json.dump(result["schema"], f, indent=2)
