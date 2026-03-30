@@ -1,10 +1,10 @@
 {
-  "schema_name": "TradingPlatform",
+  "schema_name": "TradingPlatformSchema",
   "domain": "Financial Trading",
   "tables": [
     {
       "name": "Traders",
-      "description": "Master data for individual traders on the platform.",
+      "description": "Master data for individual traders or institutional trading desks.",
       "columns": [
         {
           "name": "trader_id",
@@ -47,14 +47,6 @@
           "foreign_key": null
         },
         {
-          "name": "status",
-          "type": "TEXT",
-          "field_role": "categorical",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
           "name": "registration_date",
           "type": "DATE",
           "field_role": "temporal",
@@ -63,45 +55,15 @@
           "foreign_key": null
         },
         {
-          "name": "compliance_info",
-          "type": "JSON",
-          "field_role": "semi_structured",
-          "nullable": true,
-          "primary_key": false,
-          "foreign_key": null
-        }
-      ]
-    },
-    {
-      "name": "Instruments",
-      "description": "Reference data for financial instruments available for trading.",
-      "columns": [
-        {
-          "name": "instrument_id",
-          "type": "INTEGER",
-          "field_role": "identifier",
-          "nullable": false,
-          "primary_key": true,
-          "foreign_key": null
-        },
-        {
-          "name": "symbol",
-          "type": "TEXT",
-          "field_role": "text",
+          "name": "is_active",
+          "type": "BOOLEAN",
+          "field_role": "boolean",
           "nullable": false,
           "primary_key": false,
           "foreign_key": null
         },
         {
-          "name": "name",
-          "type": "TEXT",
-          "field_role": "text",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "instrument_type",
+          "name": "trading_tier",
           "type": "TEXT",
           "field_role": "categorical",
           "nullable": false,
@@ -109,31 +71,7 @@
           "foreign_key": null
         },
         {
-          "name": "exchange",
-          "type": "TEXT",
-          "field_role": "categorical",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "currency",
-          "type": "TEXT",
-          "field_role": "categorical",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "sector",
-          "type": "TEXT",
-          "field_role": "categorical",
-          "nullable": true,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "market_data_config",
+          "name": "address_details",
           "type": "JSON",
           "field_role": "semi_structured",
           "nullable": true,
@@ -144,7 +82,7 @@
     },
     {
       "name": "Orders",
-      "description": "Records of buy or sell orders placed by traders.",
+      "description": "Represents a trader's request to buy or sell a financial instrument.",
       "columns": [
         {
           "name": "order_id",
@@ -166,15 +104,20 @@
           }
         },
         {
-          "name": "instrument_id",
-          "type": "INTEGER",
-          "field_role": "identifier",
+          "name": "instrument_symbol",
+          "type": "TEXT",
+          "field_role": "text",
           "nullable": false,
           "primary_key": false,
-          "foreign_key": {
-            "table": "Instruments",
-            "column": "instrument_id"
-          }
+          "foreign_key": null
+        },
+        {
+          "name": "instrument_type",
+          "type": "TEXT",
+          "field_role": "categorical",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
         },
         {
           "name": "order_type",
@@ -194,17 +137,33 @@
         },
         {
           "name": "quantity",
-          "type": "INTEGER",
+          "type": "NUMERIC",
           "field_role": "numerical",
           "nullable": false,
           "primary_key": false,
           "foreign_key": null
         },
         {
-          "name": "limit_price",
+          "name": "price",
           "type": "NUMERIC",
           "field_role": "numerical",
           "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "currency",
+          "type": "TEXT",
+          "field_role": "categorical",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "order_placed_timestamp",
+          "type": "TIMESTAMP",
+          "field_role": "temporal",
+          "nullable": false,
           "primary_key": false,
           "foreign_key": null
         },
@@ -217,31 +176,7 @@
           "foreign_key": null
         },
         {
-          "name": "placed_timestamp",
-          "type": "TIMESTAMP",
-          "field_role": "temporal",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "expiration_timestamp",
-          "type": "TIMESTAMP",
-          "field_role": "temporal",
-          "nullable": true,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "notes",
-          "type": "TEXT",
-          "field_role": "text",
-          "nullable": true,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "advanced_instructions",
+          "name": "order_details",
           "type": "JSON",
           "field_role": "semi_structured",
           "nullable": true,
@@ -252,7 +187,7 @@
     },
     {
       "name": "TradeExecutions",
-      "description": "Records of actual trades resulting from placed orders.",
+      "description": "Records individual fills or partial fills against an order.",
       "columns": [
         {
           "name": "execution_id",
@@ -274,16 +209,8 @@
           }
         },
         {
-          "name": "execution_timestamp",
-          "type": "TIMESTAMP",
-          "field_role": "temporal",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
           "name": "executed_quantity",
-          "type": "INTEGER",
+          "type": "NUMERIC",
           "field_role": "numerical",
           "nullable": false,
           "primary_key": false,
@@ -298,7 +225,15 @@
           "foreign_key": null
         },
         {
-          "name": "commission_amount",
+          "name": "execution_timestamp",
+          "type": "TIMESTAMP",
+          "field_role": "temporal",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "commission_fee",
           "type": "NUMERIC",
           "field_role": "numerical",
           "nullable": false,
@@ -306,15 +241,23 @@
           "foreign_key": null
         },
         {
-          "name": "exchange_fees",
-          "type": "NUMERIC",
-          "field_role": "numerical",
-          "nullable": false,
+          "name": "broker_id",
+          "type": "TEXT",
+          "field_role": "identifier",
+          "nullable": true,
           "primary_key": false,
           "foreign_key": null
         },
         {
-          "name": "venue",
+          "name": "exchange_id",
+          "type": "TEXT",
+          "field_role": "identifier",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "execution_venue",
           "type": "TEXT",
           "field_role": "categorical",
           "nullable": true,
@@ -322,7 +265,7 @@
           "foreign_key": null
         },
         {
-          "name": "execution_details",
+          "name": "execution_metadata",
           "type": "JSON",
           "field_role": "semi_structured",
           "nullable": true,
@@ -333,7 +276,7 @@
     },
     {
       "name": "Settlements",
-      "description": "Records of financial settlement for trade executions (T+2 cycle).",
+      "description": "Tracks the T+2 settlement process for each trade execution.",
       "columns": [
         {
           "name": "settlement_id",
@@ -355,14 +298,6 @@
           }
         },
         {
-          "name": "settlement_status",
-          "type": "TEXT",
-          "field_role": "categorical",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
           "name": "settlement_date",
           "type": "DATE",
           "field_role": "temporal",
@@ -371,23 +306,7 @@
           "foreign_key": null
         },
         {
-          "name": "gross_amount",
-          "type": "NUMERIC",
-          "field_role": "numerical",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "net_amount",
-          "type": "NUMERIC",
-          "field_role": "numerical",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "currency",
+          "name": "settlement_type",
           "type": "TEXT",
           "field_role": "categorical",
           "nullable": false,
@@ -395,17 +314,49 @@
           "foreign_key": null
         },
         {
-          "name": "settlement_reference",
-          "type": "TEXT",
-          "field_role": "text",
-          "nullable": true,
+          "name": "settlement_amount",
+          "type": "NUMERIC",
+          "field_role": "numerical",
+          "nullable": false,
           "primary_key": false,
           "foreign_key": null
         },
         {
-          "name": "failure_details",
+          "name": "settlement_currency",
           "type": "TEXT",
-          "field_role": "text",
+          "field_role": "categorical",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "settlement_status",
+          "type": "TEXT",
+          "field_role": "categorical",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "settlement_attempt_count",
+          "type": "INTEGER",
+          "field_role": "numerical",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "last_update_timestamp",
+          "type": "TIMESTAMP",
+          "field_role": "temporal",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "settlement_notes",
+          "type": "TEXT",
+          "field_role": "semi_structured",
           "nullable": true,
           "primary_key": false,
           "foreign_key": null

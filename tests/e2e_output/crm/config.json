@@ -8,30 +8,73 @@
   "entities": {
     "Customers": {
       "fields": {
-        "age": {
-          "distribution": "normal",
+        "customer_segment": {
+          "distribution": "categorical",
           "params": {
-            "mean": 35,
-            "std": 12
-          }
-        },
-        "income": {
-          "distribution": "lognormal",
-          "params": {
-            "mean": 60000,
-            "sigma": 0.5
+            "categories": [
+              "Mass",
+              "Affluent",
+              "SME"
+            ]
           }
         }
       }
     },
     "Accounts": {
-      "fields": {}
+      "fields": {
+        "balance": {
+          "distribution": "lognormal",
+          "params": {
+            "mean": 5000,
+            "sigma": 0.8
+          }
+        },
+        "account_type": {
+          "distribution": "categorical",
+          "params": {
+            "categories": [
+              "Standard",
+              "Premium",
+              "Enterprise"
+            ]
+          }
+        }
+      }
     },
     "Transactions": {
-      "fields": {}
+      "fields": {
+        "amount": {
+          "distribution": "lognormal",
+          "params": {
+            "mean": 5000,
+            "sigma": 0.8
+          }
+        },
+        "transaction_type": {
+          "distribution": "categorical",
+          "params": {
+            "categories": [
+              "Standard",
+              "Premium",
+              "Enterprise"
+            ]
+          }
+        }
+      }
     },
     "Customer_Interactions": {
-      "fields": {}
+      "fields": {
+        "interaction_type": {
+          "distribution": "categorical",
+          "params": {
+            "categories": [
+              "Standard",
+              "Premium",
+              "Enterprise"
+            ]
+          }
+        }
+      }
     }
   },
   "generation_order": [
@@ -48,7 +91,7 @@
   },
   "state_machines": {
     "Accounts": {
-      "state_field": "status",
+      "state_field": "account_status",
       "initial_state": "Pending",
       "terminal_states": [
         "Closed"
@@ -57,7 +100,18 @@
         "Pending": {
           "Active": {
             "base_prob": 0.85,
-            "adjustments": []
+            "adjustments": [
+              {
+                "field": "balance",
+                "direction": "higher_increases",
+                "strength": "moderate"
+              },
+              {
+                "field": "account_type",
+                "direction": "higher_increases",
+                "strength": "weak"
+              }
+            ]
           },
           "Closed": {
             "base_prob": 0.15,
@@ -71,7 +125,18 @@
           },
           "Dormant": {
             "base_prob": 0.14,
-            "adjustments": []
+            "adjustments": [
+              {
+                "field": "balance",
+                "direction": "higher_increases",
+                "strength": "moderate"
+              },
+              {
+                "field": "account_type",
+                "direction": "higher_increases",
+                "strength": "weak"
+              }
+            ]
           },
           "Closed": {
             "base_prob": 0.01,
@@ -89,7 +154,18 @@
           },
           "Closed": {
             "base_prob": 0.1,
-            "adjustments": []
+            "adjustments": [
+              {
+                "field": "balance",
+                "direction": "higher_increases",
+                "strength": "moderate"
+              },
+              {
+                "field": "account_type",
+                "direction": "higher_increases",
+                "strength": "weak"
+              }
+            ]
           }
         }
       }
@@ -104,7 +180,16 @@
       "frequency": {
         "distribution": "poisson",
         "lambda_base": 5.0,
-        "lambda_modifiers": []
+        "lambda_modifiers": [
+          {
+            "field": "balance",
+            "effect": "higher_increases"
+          },
+          {
+            "field": "account_type",
+            "effect": "higher_increases"
+          }
+        ]
       },
       "fields": {}
     }
@@ -115,7 +200,7 @@
       "params": {
         "fields": [
           "date_of_birth",
-          "registration_date"
+          "onboarding_date"
         ]
       }
     },
@@ -123,9 +208,9 @@
       "type": "temporal_order",
       "params": {
         "fields": [
-          "status_effective_date",
-          "opened_date",
-          "closed_date"
+          "opening_date",
+          "closing_date",
+          "last_status_change_timestamp"
         ]
       }
     }

@@ -1,14 +1,14 @@
 {
   "schema_name": "CreditRiskManagement",
-  "domain": "Financial Services - Credit Risk",
+  "domain": "Financial Services",
   "tables": [
     {
       "name": "Customers",
-      "description": "Master table for customer information, including personal details and segment.",
+      "description": "Master table for customer information, including personal details and overall status.",
       "columns": [
         {
           "name": "customer_id",
-          "type": "INTEGER",
+          "type": "TEXT",
           "field_role": "identifier",
           "nullable": false,
           "primary_key": true,
@@ -39,7 +39,7 @@
           "foreign_key": null
         },
         {
-          "name": "email_address",
+          "name": "email",
           "type": "TEXT",
           "field_role": "text",
           "nullable": true,
@@ -63,15 +63,7 @@
           "foreign_key": null
         },
         {
-          "name": "customer_segment",
-          "type": "TEXT",
-          "field_role": "categorical",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "onboarding_date",
+          "name": "customer_since",
           "type": "DATE",
           "field_role": "temporal",
           "nullable": false,
@@ -79,9 +71,17 @@
           "foreign_key": null
         },
         {
-          "name": "additional_info_json",
-          "type": "JSON",
-          "field_role": "semi_structured",
+          "name": "customer_status",
+          "type": "TEXT",
+          "field_role": "categorical",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "customer_notes",
+          "type": "TEXT",
+          "field_role": "text",
           "nullable": true,
           "primary_key": false,
           "foreign_key": null
@@ -90,11 +90,11 @@
     },
     {
       "name": "CreditScores",
-      "description": "Records historical credit scores for customers, including details about the score calculation.",
+      "description": "Records of customer credit scores obtained from various providers over time.",
       "columns": [
         {
           "name": "credit_score_id",
-          "type": "INTEGER",
+          "type": "TEXT",
           "field_role": "identifier",
           "nullable": false,
           "primary_key": true,
@@ -102,7 +102,7 @@
         },
         {
           "name": "customer_id",
-          "type": "INTEGER",
+          "type": "TEXT",
           "field_role": "identifier",
           "nullable": false,
           "primary_key": false,
@@ -110,14 +110,6 @@
             "table": "Customers",
             "column": "customer_id"
           }
-        },
-        {
-          "name": "score_value",
-          "type": "INTEGER",
-          "field_role": "numerical",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
         },
         {
           "name": "score_date",
@@ -128,17 +120,33 @@
           "foreign_key": null
         },
         {
-          "name": "score_model_version",
+          "name": "score_value",
+          "type": "INTEGER",
+          "field_role": "numerical",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "score_provider",
           "type": "TEXT",
           "field_role": "categorical",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "score_model_version",
+          "type": "TEXT",
+          "field_role": "text",
           "nullable": true,
           "primary_key": false,
           "foreign_key": null
         },
         {
-          "name": "score_details_json",
-          "type": "JSON",
-          "field_role": "semi_structured",
+          "name": "credit_score_bucket",
+          "type": "TEXT",
+          "field_role": "categorical",
           "nullable": true,
           "primary_key": false,
           "foreign_key": null
@@ -147,11 +155,11 @@
     },
     {
       "name": "LoanApplications",
-      "description": "Stores details of loan applications submitted by customers.",
+      "description": "Details of loan applications submitted by customers.",
       "columns": [
         {
           "name": "application_id",
-          "type": "INTEGER",
+          "type": "TEXT",
           "field_role": "identifier",
           "nullable": false,
           "primary_key": true,
@@ -159,7 +167,7 @@
         },
         {
           "name": "customer_id",
-          "type": "INTEGER",
+          "type": "TEXT",
           "field_role": "identifier",
           "nullable": false,
           "primary_key": false,
@@ -170,14 +178,14 @@
         },
         {
           "name": "application_date",
-          "type": "TIMESTAMP",
+          "type": "DATE",
           "field_role": "temporal",
           "nullable": false,
           "primary_key": false,
           "foreign_key": null
         },
         {
-          "name": "requested_amount",
+          "name": "loan_amount_requested",
           "type": "NUMERIC",
           "field_role": "numerical",
           "nullable": false,
@@ -201,15 +209,15 @@
           "foreign_key": null
         },
         {
-          "name": "approval_date",
-          "type": "TIMESTAMP",
+          "name": "decision_date",
+          "type": "DATE",
           "field_role": "temporal",
           "nullable": true,
           "primary_key": false,
           "foreign_key": null
         },
         {
-          "name": "rejected_reason",
+          "name": "decision_reason",
           "type": "TEXT",
           "field_role": "text",
           "nullable": true,
@@ -217,7 +225,7 @@
           "foreign_key": null
         },
         {
-          "name": "application_data_json",
+          "name": "application_details",
           "type": "JSON",
           "field_role": "semi_structured",
           "nullable": true,
@@ -228,11 +236,11 @@
     },
     {
       "name": "Loans",
-      "description": "Contains details of approved and disbursed loans.",
+      "description": "Records of approved and active loans, including financial terms and current status.",
       "columns": [
         {
           "name": "loan_id",
-          "type": "INTEGER",
+          "type": "TEXT",
           "field_role": "identifier",
           "nullable": false,
           "primary_key": true,
@@ -240,9 +248,9 @@
         },
         {
           "name": "application_id",
-          "type": "INTEGER",
+          "type": "TEXT",
           "field_role": "identifier",
-          "nullable": false,
+          "nullable": true,
           "primary_key": false,
           "foreign_key": {
             "table": "LoanApplications",
@@ -251,7 +259,7 @@
         },
         {
           "name": "customer_id",
-          "type": "INTEGER",
+          "type": "TEXT",
           "field_role": "identifier",
           "nullable": false,
           "primary_key": false,
@@ -261,7 +269,31 @@
           }
         },
         {
-          "name": "principal_amount",
+          "name": "loan_start_date",
+          "type": "DATE",
+          "field_role": "temporal",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "loan_end_date_expected",
+          "type": "DATE",
+          "field_role": "temporal",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "original_loan_amount",
+          "type": "NUMERIC",
+          "field_role": "numerical",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "current_outstanding_balance",
           "type": "NUMERIC",
           "field_role": "numerical",
           "nullable": false,
@@ -277,7 +309,7 @@
           "foreign_key": null
         },
         {
-          "name": "term_months",
+          "name": "loan_term_months",
           "type": "INTEGER",
           "field_role": "numerical",
           "nullable": false,
@@ -285,17 +317,9 @@
           "foreign_key": null
         },
         {
-          "name": "disbursement_date",
-          "type": "DATE",
-          "field_role": "temporal",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "maturity_date",
-          "type": "DATE",
-          "field_role": "temporal",
+          "name": "loan_type",
+          "type": "TEXT",
+          "field_role": "categorical",
           "nullable": false,
           "primary_key": false,
           "foreign_key": null
@@ -309,10 +333,10 @@
           "foreign_key": null
         },
         {
-          "name": "current_outstanding_balance",
-          "type": "NUMERIC",
-          "field_role": "numerical",
-          "nullable": false,
+          "name": "next_payment_due_date",
+          "type": "DATE",
+          "field_role": "temporal",
+          "nullable": true,
           "primary_key": false,
           "foreign_key": null
         },
@@ -325,7 +349,7 @@
           "foreign_key": null
         },
         {
-          "name": "loan_terms_json",
+          "name": "loan_terms",
           "type": "JSON",
           "field_role": "semi_structured",
           "nullable": true,
@@ -335,12 +359,12 @@
       ]
     },
     {
-      "name": "Repayments",
-      "description": "Records all repayment transactions made by customers against their loans.",
+      "name": "LoanPayments",
+      "description": "Records of all payments made by customers towards their loans.",
       "columns": [
         {
-          "name": "repayment_id",
-          "type": "INTEGER",
+          "name": "payment_id",
+          "type": "TEXT",
           "field_role": "identifier",
           "nullable": false,
           "primary_key": true,
@@ -348,24 +372,13 @@
         },
         {
           "name": "loan_id",
-          "type": "INTEGER",
+          "type": "TEXT",
           "field_role": "identifier",
           "nullable": false,
           "primary_key": false,
           "foreign_key": {
             "table": "Loans",
             "column": "loan_id"
-          }
-        },
-        {
-          "name": "customer_id",
-          "type": "INTEGER",
-          "field_role": "identifier",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": {
-            "table": "Customers",
-            "column": "customer_id"
           }
         },
         {
@@ -377,7 +390,7 @@
           "foreign_key": null
         },
         {
-          "name": "amount_paid",
+          "name": "payment_amount",
           "type": "NUMERIC",
           "field_role": "numerical",
           "nullable": false,
@@ -385,7 +398,39 @@
           "foreign_key": null
         },
         {
+          "name": "principal_paid",
+          "type": "NUMERIC",
+          "field_role": "numerical",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "interest_paid",
+          "type": "NUMERIC",
+          "field_role": "numerical",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "fees_paid",
+          "type": "NUMERIC",
+          "field_role": "numerical",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
           "name": "payment_method",
+          "type": "TEXT",
+          "field_role": "categorical",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "payment_status",
           "type": "TEXT",
           "field_role": "categorical",
           "nullable": false,
@@ -393,15 +438,7 @@
           "foreign_key": null
         },
         {
-          "name": "is_early_payment",
-          "type": "BOOLEAN",
-          "field_role": "boolean",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "repayment_notes",
+          "name": "transaction_reference",
           "type": "TEXT",
           "field_role": "text",
           "nullable": true,
@@ -412,11 +449,11 @@
     },
     {
       "name": "Delinquencies",
-      "description": "Tracks instances of loan delinquency, including status and recovery efforts.",
+      "description": "Tracks instances of loan delinquency, including days past due and associated fees.",
       "columns": [
         {
           "name": "delinquency_id",
-          "type": "INTEGER",
+          "type": "TEXT",
           "field_role": "identifier",
           "nullable": false,
           "primary_key": true,
@@ -424,7 +461,7 @@
         },
         {
           "name": "loan_id",
-          "type": "INTEGER",
+          "type": "TEXT",
           "field_role": "identifier",
           "nullable": false,
           "primary_key": false,
@@ -434,18 +471,7 @@
           }
         },
         {
-          "name": "customer_id",
-          "type": "INTEGER",
-          "field_role": "identifier",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": {
-            "table": "Customers",
-            "column": "customer_id"
-          }
-        },
-        {
-          "name": "delinquency_start_date",
+          "name": "due_date",
           "type": "DATE",
           "field_role": "temporal",
           "nullable": false,
@@ -461,10 +487,18 @@
           "foreign_key": null
         },
         {
-          "name": "outstanding_due_amount",
+          "name": "amount_due",
           "type": "NUMERIC",
           "field_role": "numerical",
           "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "late_fees_incurred",
+          "type": "NUMERIC",
+          "field_role": "numerical",
+          "nullable": true,
           "primary_key": false,
           "foreign_key": null
         },
@@ -477,22 +511,6 @@
           "foreign_key": null
         },
         {
-          "name": "last_action_date",
-          "type": "TIMESTAMP",
-          "field_role": "temporal",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "recovery_agent_notes",
-          "type": "TEXT",
-          "field_role": "text",
-          "nullable": true,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
           "name": "resolution_date",
           "type": "DATE",
           "field_role": "temporal",
@@ -501,9 +519,9 @@
           "foreign_key": null
         },
         {
-          "name": "delinquency_reasons_json",
-          "type": "JSON",
-          "field_role": "semi_structured",
+          "name": "resolution_notes",
+          "type": "TEXT",
+          "field_role": "text",
           "nullable": true,
           "primary_key": false,
           "foreign_key": null

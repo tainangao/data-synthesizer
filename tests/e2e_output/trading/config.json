@@ -7,41 +7,55 @@
   },
   "entities": {
     "Traders": {
+      "fields": {}
+    },
+    "Orders": {
       "fields": {
-        "trader_type": {
-          "distribution": "categorical",
+        "quantity": {
+          "distribution": "lognormal",
           "params": {
-            "categories": [
-              "Retail",
-              "Institutional",
-              "HFT"
-            ]
+            "mean": 1000,
+            "sigma": 0.8
+          }
+        },
+        "price": {
+          "distribution": "lognormal",
+          "params": {
+            "mean": 100,
+            "sigma": 0.5
           }
         }
       }
     },
-    "Instruments": {
-      "fields": {}
-    },
-    "Orders": {
-      "fields": {}
-    },
     "TradeExecutions": {
-      "fields": {}
+      "fields": {
+        "executed_quantity": {
+          "distribution": "lognormal",
+          "params": {
+            "mean": 1000,
+            "sigma": 0.8
+          }
+        },
+        "executed_price": {
+          "distribution": "lognormal",
+          "params": {
+            "mean": 100,
+            "sigma": 0.5
+          }
+        }
+      }
     },
     "Settlements": {
       "fields": {}
     }
   },
   "generation_order": [
-    "Instruments",
     "Traders",
     "Orders",
     "TradeExecutions",
     "Settlements"
   ],
   "table_counts": {
-    "Instruments": 200,
     "Traders": 1000,
     "Orders": 2500,
     "TradeExecutions": 1000,
@@ -63,11 +77,23 @@
           },
           "Partial Fill": {
             "base_prob": 0.2,
-            "adjustments": []
+            "adjustments": [
+              {
+                "field": "instrument_type",
+                "direction": "higher_increases",
+                "strength": "weak"
+              }
+            ]
           },
           "Filled": {
             "base_prob": 0.3,
-            "adjustments": []
+            "adjustments": [
+              {
+                "field": "instrument_type",
+                "direction": "higher_increases",
+                "strength": "weak"
+              }
+            ]
           },
           "Cancelled": {
             "base_prob": 0.1,
@@ -81,7 +107,13 @@
           },
           "Filled": {
             "base_prob": 0.6,
-            "adjustments": []
+            "adjustments": [
+              {
+                "field": "instrument_type",
+                "direction": "higher_increases",
+                "strength": "weak"
+              }
+            ]
           },
           "Cancelled": {
             "base_prob": 0.1,
@@ -101,7 +133,12 @@
       "frequency": {
         "distribution": "poisson",
         "lambda_base": 2.0,
-        "lambda_modifiers": []
+        "lambda_modifiers": [
+          {
+            "field": "instrument_type",
+            "effect": "higher_increases"
+          }
+        ]
       },
       "fields": {}
     },
@@ -114,7 +151,12 @@
       "frequency": {
         "distribution": "poisson",
         "lambda_base": 2.0,
-        "lambda_modifiers": []
+        "lambda_modifiers": [
+          {
+            "field": "instrument_type",
+            "effect": "higher_increases"
+          }
+        ]
       },
       "fields": {}
     }
@@ -124,8 +166,8 @@
       "type": "temporal_order",
       "params": {
         "fields": [
-          "placed_timestamp",
-          "expiration_timestamp"
+          "settlement_date",
+          "last_update_timestamp"
         ]
       }
     }

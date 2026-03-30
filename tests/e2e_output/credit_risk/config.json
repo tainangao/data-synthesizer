@@ -7,37 +7,62 @@
   },
   "entities": {
     "Customers": {
+      "fields": {}
+    },
+    "CreditScores": {
       "fields": {
-        "credit_score": {
+        "score_value": {
           "distribution": "normal",
           "params": {
             "mean": 650,
             "std": 100
           }
-        },
-        "income": {
+        }
+      }
+    },
+    "LoanApplications": {
+      "fields": {
+        "loan_amount_requested": {
           "distribution": "lognormal",
           "params": {
-            "mean": 60000,
-            "sigma": 0.5
+            "mean": 25000,
+            "sigma": 0.6
           }
         }
       }
     },
-    "CreditScores": {
-      "fields": {}
-    },
-    "LoanApplications": {
-      "fields": {}
-    },
     "Loans": {
-      "fields": {}
+      "fields": {
+        "original_loan_amount": {
+          "distribution": "lognormal",
+          "params": {
+            "mean": 25000,
+            "sigma": 0.6
+          }
+        }
+      }
     },
-    "Repayments": {
-      "fields": {}
+    "LoanPayments": {
+      "fields": {
+        "payment_amount": {
+          "distribution": "lognormal",
+          "params": {
+            "mean": 25000,
+            "sigma": 0.6
+          }
+        }
+      }
     },
     "Delinquencies": {
-      "fields": {}
+      "fields": {
+        "amount_due": {
+          "distribution": "lognormal",
+          "params": {
+            "mean": 25000,
+            "sigma": 0.6
+          }
+        }
+      }
     }
   },
   "generation_order": [
@@ -46,7 +71,7 @@
     "LoanApplications",
     "Loans",
     "Delinquencies",
-    "Repayments"
+    "LoanPayments"
   ],
   "table_counts": {
     "Customers": 1000,
@@ -54,7 +79,7 @@
     "LoanApplications": 1000,
     "Loans": 1400,
     "Delinquencies": 1600,
-    "Repayments": 2500
+    "LoanPayments": 1600
   },
   "state_machines": {
     "LoanApplications": {
@@ -68,38 +93,232 @@
         "Pending": {
           "Approved": {
             "base_prob": 0.7,
-            "adjustments": []
+            "adjustments": [
+              {
+                "field": "loan_amount_requested",
+                "direction": "higher_increases",
+                "strength": "moderate"
+              },
+              {
+                "field": "loan_type",
+                "direction": "higher_increases",
+                "strength": "weak"
+              }
+            ]
           },
           "Rejected": {
             "base_prob": 0.3,
+            "adjustments": [
+              {
+                "field": "loan_amount_requested",
+                "direction": "higher_increases",
+                "strength": "moderate"
+              },
+              {
+                "field": "loan_type",
+                "direction": "higher_increases",
+                "strength": "weak"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "Loans": {
+      "state_field": "loan_status",
+      "initial_state": "Current",
+      "terminal_states": [
+        "Paid in Full",
+        "Charged-off"
+      ],
+      "transitions": {
+        "Current": {
+          "Current": {
+            "base_prob": 0.94,
             "adjustments": []
+          },
+          "Delinquent": {
+            "base_prob": 0.03,
+            "adjustments": [
+              {
+                "field": "original_loan_amount",
+                "direction": "higher_increases",
+                "strength": "moderate"
+              },
+              {
+                "field": "current_outstanding_balance",
+                "direction": "higher_increases",
+                "strength": "moderate"
+              },
+              {
+                "field": "loan_type",
+                "direction": "higher_increases",
+                "strength": "weak"
+              }
+            ]
+          },
+          "Paid in Full": {
+            "base_prob": 0.03,
+            "adjustments": []
+          }
+        },
+        "Delinquent": {
+          "Current": {
+            "base_prob": 0.2,
+            "adjustments": []
+          },
+          "Delinquent": {
+            "base_prob": 0.6,
+            "adjustments": []
+          },
+          "Default": {
+            "base_prob": 0.15,
+            "adjustments": [
+              {
+                "field": "original_loan_amount",
+                "direction": "higher_increases",
+                "strength": "moderate"
+              },
+              {
+                "field": "current_outstanding_balance",
+                "direction": "higher_increases",
+                "strength": "moderate"
+              },
+              {
+                "field": "loan_type",
+                "direction": "higher_increases",
+                "strength": "weak"
+              }
+            ]
+          },
+          "Paid in Full": {
+            "base_prob": 0.05,
+            "adjustments": []
+          }
+        },
+        "Default": {
+          "Current": {
+            "base_prob": 0.05,
+            "adjustments": []
+          },
+          "Delinquent": {
+            "base_prob": 0.1,
+            "adjustments": []
+          },
+          "Default": {
+            "base_prob": 0.7,
+            "adjustments": []
+          },
+          "Charged-off": {
+            "base_prob": 0.15,
+            "adjustments": [
+              {
+                "field": "original_loan_amount",
+                "direction": "higher_increases",
+                "strength": "moderate"
+              },
+              {
+                "field": "current_outstanding_balance",
+                "direction": "higher_increases",
+                "strength": "moderate"
+              },
+              {
+                "field": "loan_type",
+                "direction": "higher_increases",
+                "strength": "weak"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "LoanPayments": {
+      "state_field": "payment_status",
+      "initial_state": "Current",
+      "terminal_states": [
+        "Paid in Full",
+        "Charged-off"
+      ],
+      "transitions": {
+        "Current": {
+          "Current": {
+            "base_prob": 0.94,
+            "adjustments": []
+          },
+          "Delinquent": {
+            "base_prob": 0.03,
+            "adjustments": [
+              {
+                "field": "payment_amount",
+                "direction": "higher_increases",
+                "strength": "moderate"
+              }
+            ]
+          },
+          "Paid in Full": {
+            "base_prob": 0.03,
+            "adjustments": []
+          }
+        },
+        "Delinquent": {
+          "Current": {
+            "base_prob": 0.2,
+            "adjustments": []
+          },
+          "Delinquent": {
+            "base_prob": 0.6,
+            "adjustments": []
+          },
+          "Default": {
+            "base_prob": 0.15,
+            "adjustments": [
+              {
+                "field": "payment_amount",
+                "direction": "higher_increases",
+                "strength": "moderate"
+              }
+            ]
+          },
+          "Paid in Full": {
+            "base_prob": 0.05,
+            "adjustments": []
+          }
+        },
+        "Default": {
+          "Current": {
+            "base_prob": 0.05,
+            "adjustments": []
+          },
+          "Delinquent": {
+            "base_prob": 0.1,
+            "adjustments": []
+          },
+          "Default": {
+            "base_prob": 0.7,
+            "adjustments": []
+          },
+          "Charged-off": {
+            "base_prob": 0.15,
+            "adjustments": [
+              {
+                "field": "payment_amount",
+                "direction": "higher_increases",
+                "strength": "moderate"
+              }
+            ]
           }
         }
       }
     }
   },
-  "events": {
-    "Repayments": {
-      "emitted_by": "LoanApplications",
-      "emit_when_states": [
-        "Current",
-        "Delinquent"
-      ],
-      "frequency": {
-        "distribution": "poisson",
-        "lambda_base": 1.0,
-        "lambda_modifiers": []
-      },
-      "fields": {}
-    }
-  },
+  "events": {},
   "constraints": [
     {
       "type": "temporal_order",
       "params": {
         "fields": [
           "date_of_birth",
-          "onboarding_date"
+          "customer_since"
         ]
       }
     },
@@ -108,7 +327,7 @@
       "params": {
         "fields": [
           "application_date",
-          "approval_date"
+          "decision_date"
         ]
       }
     },
@@ -116,8 +335,9 @@
       "type": "temporal_order",
       "params": {
         "fields": [
-          "disbursement_date",
-          "maturity_date",
+          "loan_start_date",
+          "loan_end_date_expected",
+          "next_payment_due_date",
           "last_payment_date"
         ]
       }
@@ -126,8 +346,7 @@
       "type": "temporal_order",
       "params": {
         "fields": [
-          "delinquency_start_date",
-          "last_action_date",
+          "due_date",
           "resolution_date"
         ]
       }
