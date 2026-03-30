@@ -1,6 +1,6 @@
 import random
 
-from src.common import safe_name, tokens
+from utils.common import safe_name, tokens
 
 DOMAIN_KEYWORDS = {
     "crm": {

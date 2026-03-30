@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from src.common import tokens
+from utils.common import tokens
 
 
 def pk_column(table: dict) -> dict | None:

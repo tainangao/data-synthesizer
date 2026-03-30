@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from src.gen_schema.gemini_client import GeminiClient
+from utils.gemini_client import GeminiClient
 from src.gen_schema.schema_validator import (
     format_validation_feedback,
     validate_schema,
