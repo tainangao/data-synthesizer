@@ -1,10 +1,10 @@
 {
-  "schema_name": "CRM_Financial_Schema",
-  "domain": "Customer Relationship Management (CRM) for Financial Services",
+  "schema_name": "CRM_System",
+  "domain": "Financial CRM",
   "tables": [
     {
       "name": "Customers",
-      "description": "Master data for individual and corporate customers.",
+      "description": "Master data for individual or business customers.",
       "columns": [
         {
           "name": "customer_id",
@@ -18,7 +18,7 @@
           "name": "first_name",
           "type": "TEXT",
           "field_role": "text",
-          "nullable": false,
+          "nullable": true,
           "primary_key": false,
           "foreign_key": null
         },
@@ -26,7 +26,7 @@
           "name": "last_name",
           "type": "TEXT",
           "field_role": "text",
-          "nullable": false,
+          "nullable": true,
           "primary_key": false,
           "foreign_key": null
         },
@@ -47,9 +47,41 @@
           "foreign_key": null
         },
         {
-          "name": "address_json",
-          "type": "JSON",
-          "field_role": "semi_structured",
+          "name": "address_line_1",
+          "type": "TEXT",
+          "field_role": "text",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "city",
+          "type": "TEXT",
+          "field_role": "text",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "state_province",
+          "type": "TEXT",
+          "field_role": "text",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "zip_postal_code",
+          "type": "TEXT",
+          "field_role": "text",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "country",
+          "type": "TEXT",
+          "field_role": "text",
           "nullable": true,
           "primary_key": false,
           "foreign_key": null
@@ -63,34 +95,34 @@
           "foreign_key": null
         },
         {
-          "name": "customer_segment",
+          "name": "customer_type",
           "type": "TEXT",
           "field_role": "categorical",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "registration_date",
+          "type": "TIMESTAMP",
+          "field_role": "temporal",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "marketing_preferences",
+          "type": "JSON",
+          "field_role": "semi_structured",
           "nullable": true,
           "primary_key": false,
           "foreign_key": null
         },
         {
-          "name": "marketing_opt_in",
-          "type": "BOOLEAN",
-          "field_role": "boolean",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "created_at",
-          "type": "TIMESTAMP",
-          "field_role": "temporal",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "updated_at",
-          "type": "TIMESTAMP",
-          "field_role": "temporal",
-          "nullable": false,
+          "name": "notes",
+          "type": "TEXT",
+          "field_role": "text",
+          "nullable": true,
           "primary_key": false,
           "foreign_key": null
         }
@@ -98,7 +130,7 @@
     },
     {
       "name": "Accounts",
-      "description": "Financial accounts held by customers, including their status lifecycle.",
+      "description": "Financial accounts held by customers, with status lifecycle.",
       "columns": [
         {
           "name": "account_id",
@@ -120,15 +152,15 @@
           }
         },
         {
-          "name": "account_number",
+          "name": "account_type",
           "type": "TEXT",
-          "field_role": "identifier",
+          "field_role": "categorical",
           "nullable": false,
           "primary_key": false,
           "foreign_key": null
         },
         {
-          "name": "account_type",
+          "name": "currency",
           "type": "TEXT",
           "field_role": "categorical",
           "nullable": false,
@@ -144,14 +176,6 @@
           "foreign_key": null
         },
         {
-          "name": "currency",
-          "type": "TEXT",
-          "field_role": "categorical",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
           "name": "status",
           "type": "TEXT",
           "field_role": "categorical",
@@ -160,7 +184,7 @@
           "foreign_key": null
         },
         {
-          "name": "status_updated_at",
+          "name": "status_effective_date",
           "type": "TIMESTAMP",
           "field_role": "temporal",
           "nullable": false,
@@ -184,7 +208,7 @@
           "foreign_key": null
         },
         {
-          "name": "account_preferences_json",
+          "name": "account_details",
           "type": "JSON",
           "field_role": "semi_structured",
           "nullable": true,
@@ -195,7 +219,7 @@
     },
     {
       "name": "Transactions",
-      "description": "Records of financial transactions associated with customer accounts.",
+      "description": "Records of all financial transactions related to accounts.",
       "columns": [
         {
           "name": "transaction_id",
@@ -215,6 +239,14 @@
             "table": "Accounts",
             "column": "account_id"
           }
+        },
+        {
+          "name": "transaction_date",
+          "type": "TIMESTAMP",
+          "field_role": "temporal",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
         },
         {
           "name": "transaction_type",
@@ -241,14 +273,6 @@
           "foreign_key": null
         },
         {
-          "name": "transaction_date",
-          "type": "TIMESTAMP",
-          "field_role": "temporal",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
           "name": "description",
           "type": "TEXT",
           "field_role": "text",
@@ -265,7 +289,7 @@
           "foreign_key": null
         },
         {
-          "name": "merchant_details_json",
+          "name": "merchant_details",
           "type": "JSON",
           "field_role": "semi_structured",
           "nullable": true,
@@ -276,7 +300,7 @@
     },
     {
       "name": "Customer_Interactions",
-      "description": "Logs of all interactions between customers and the financial institution.",
+      "description": "Records of all interactions and communications with customers.",
       "columns": [
         {
           "name": "interaction_id",
@@ -298,6 +322,14 @@
           }
         },
         {
+          "name": "interaction_date",
+          "type": "TIMESTAMP",
+          "field_role": "temporal",
+          "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
           "name": "interaction_type",
           "type": "TEXT",
           "field_role": "categorical",
@@ -306,10 +338,10 @@
           "foreign_key": null
         },
         {
-          "name": "interaction_timestamp",
-          "type": "TIMESTAMP",
-          "field_role": "temporal",
-          "nullable": false,
+          "name": "agent_id",
+          "type": "INTEGER",
+          "field_role": "identifier",
+          "nullable": true,
           "primary_key": false,
           "foreign_key": null
         },
@@ -330,23 +362,7 @@
           "foreign_key": null
         },
         {
-          "name": "agent_id",
-          "type": "INTEGER",
-          "field_role": "identifier",
-          "nullable": true,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "sentiment_score",
-          "type": "NUMERIC",
-          "field_role": "numerical",
-          "nullable": true,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "interaction_metadata_json",
+          "name": "channel_details",
           "type": "JSON",
           "field_role": "semi_structured",
           "nullable": true,

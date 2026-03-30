@@ -107,18 +107,6 @@
         "lambda_modifiers": []
       },
       "fields": {}
-    },
-    "Customer_Interactions": {
-      "emitted_by": "Accounts",
-      "emit_when_states": [
-        "Active"
-      ],
-      "frequency": {
-        "distribution": "poisson",
-        "lambda_base": 5.0,
-        "lambda_modifiers": []
-      },
-      "fields": {}
     }
   },
   "constraints": [
@@ -127,8 +115,7 @@
       "params": {
         "fields": [
           "date_of_birth",
-          "created_at",
-          "updated_at"
+          "registration_date"
         ]
       }
     },
@@ -136,7 +123,7 @@
       "type": "temporal_order",
       "params": {
         "fields": [
-          "status_updated_at",
+          "status_effective_date",
           "opened_date",
           "closed_date"
         ]

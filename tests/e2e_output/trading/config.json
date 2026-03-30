@@ -49,7 +49,7 @@
   },
   "state_machines": {
     "Orders": {
-      "state_field": "current_status",
+      "state_field": "order_status",
       "initial_state": "Open",
       "terminal_states": [
         "Filled",
@@ -92,7 +92,7 @@
     }
   },
   "events": {
-    "Traders": {
+    "TradeExecutions": {
       "emitted_by": "Orders",
       "emit_when_states": [
         "Open",
@@ -105,7 +105,7 @@
       },
       "fields": {}
     },
-    "TradeExecutions": {
+    "Settlements": {
       "emitted_by": "Orders",
       "emit_when_states": [
         "Open",
@@ -126,15 +126,6 @@
         "fields": [
           "placed_timestamp",
           "expiration_timestamp"
-        ]
-      }
-    },
-    {
-      "type": "temporal_order",
-      "params": {
-        "fields": [
-          "settlement_date",
-          "actual_settlement_timestamp"
         ]
       }
     }
