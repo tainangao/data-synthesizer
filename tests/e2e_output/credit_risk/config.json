@@ -7,7 +7,18 @@
   },
   "entities": {
     "Customers": {
-      "fields": {}
+      "fields": {
+        "customer_segment": {
+          "distribution": "categorical",
+          "params": {
+            "categories": [
+              "Prime",
+              "Near-Prime",
+              "Subprime"
+            ]
+          }
+        }
+      }
     },
     "CreditScores": {
       "fields": {
@@ -22,18 +33,25 @@
     },
     "LoanApplications": {
       "fields": {
-        "loan_amount_requested": {
+        "requested_amount": {
           "distribution": "lognormal",
           "params": {
             "mean": 25000,
             "sigma": 0.6
+          }
+        },
+        "credit_score_at_application": {
+          "distribution": "normal",
+          "params": {
+            "mean": 650,
+            "std": 100
           }
         }
       }
     },
     "Loans": {
       "fields": {
-        "original_loan_amount": {
+        "principal_amount": {
           "distribution": "lognormal",
           "params": {
             "mean": 25000,
@@ -42,7 +60,7 @@
         }
       }
     },
-    "LoanPayments": {
+    "LoanRepayments": {
       "fields": {
         "payment_amount": {
           "distribution": "lognormal",
@@ -55,7 +73,7 @@
     },
     "Delinquencies": {
       "fields": {
-        "amount_due": {
+        "outstanding_amount": {
           "distribution": "lognormal",
           "params": {
             "mean": 25000,
@@ -71,7 +89,7 @@
     "LoanApplications",
     "Loans",
     "Delinquencies",
-    "LoanPayments"
+    "LoanRepayments"
   ],
   "table_counts": {
     "Customers": 1000,
@@ -79,7 +97,7 @@
     "LoanApplications": 1000,
     "Loans": 1400,
     "Delinquencies": 1600,
-    "LoanPayments": 1600
+    "LoanRepayments": 1600
   },
   "state_machines": {
     "LoanApplications": {
@@ -95,7 +113,12 @@
             "base_prob": 0.7,
             "adjustments": [
               {
-                "field": "loan_amount_requested",
+                "field": "requested_amount",
+                "direction": "higher_increases",
+                "strength": "moderate"
+              },
+              {
+                "field": "credit_score_at_application",
                 "direction": "higher_increases",
                 "strength": "moderate"
               },
@@ -110,7 +133,12 @@
             "base_prob": 0.3,
             "adjustments": [
               {
-                "field": "loan_amount_requested",
+                "field": "requested_amount",
+                "direction": "higher_increases",
+                "strength": "moderate"
+              },
+              {
+                "field": "credit_score_at_application",
                 "direction": "higher_increases",
                 "strength": "moderate"
               },
@@ -141,19 +169,9 @@
             "base_prob": 0.03,
             "adjustments": [
               {
-                "field": "original_loan_amount",
+                "field": "principal_amount",
                 "direction": "higher_increases",
                 "strength": "moderate"
-              },
-              {
-                "field": "current_outstanding_balance",
-                "direction": "higher_increases",
-                "strength": "moderate"
-              },
-              {
-                "field": "loan_type",
-                "direction": "higher_increases",
-                "strength": "weak"
               }
             ]
           },
@@ -175,19 +193,9 @@
             "base_prob": 0.15,
             "adjustments": [
               {
-                "field": "original_loan_amount",
+                "field": "principal_amount",
                 "direction": "higher_increases",
                 "strength": "moderate"
-              },
-              {
-                "field": "current_outstanding_balance",
-                "direction": "higher_increases",
-                "strength": "moderate"
-              },
-              {
-                "field": "loan_type",
-                "direction": "higher_increases",
-                "strength": "weak"
               }
             ]
           },
@@ -213,27 +221,17 @@
             "base_prob": 0.15,
             "adjustments": [
               {
-                "field": "original_loan_amount",
+                "field": "principal_amount",
                 "direction": "higher_increases",
                 "strength": "moderate"
-              },
-              {
-                "field": "current_outstanding_balance",
-                "direction": "higher_increases",
-                "strength": "moderate"
-              },
-              {
-                "field": "loan_type",
-                "direction": "higher_increases",
-                "strength": "weak"
               }
             ]
           }
         }
       }
     },
-    "LoanPayments": {
-      "state_field": "payment_status",
+    "LoanRepayments": {
+      "state_field": "status",
       "initial_state": "Current",
       "terminal_states": [
         "Paid in Full",
@@ -318,7 +316,7 @@
       "params": {
         "fields": [
           "date_of_birth",
-          "customer_since"
+          "created_at"
         ]
       }
     },
@@ -326,19 +324,8 @@
       "type": "temporal_order",
       "params": {
         "fields": [
-          "application_date",
-          "decision_date"
-        ]
-      }
-    },
-    {
-      "type": "temporal_order",
-      "params": {
-        "fields": [
-          "loan_start_date",
-          "loan_end_date_expected",
-          "next_payment_due_date",
-          "last_payment_date"
+          "origination_date",
+          "maturity_date"
         ]
       }
     },
@@ -347,7 +334,7 @@
       "params": {
         "fields": [
           "due_date",
-          "resolution_date"
+          "delinquency_start_date"
         ]
       }
     }

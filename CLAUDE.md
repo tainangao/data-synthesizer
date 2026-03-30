@@ -35,11 +35,7 @@ The codebase follows a two-phase pipeline:
 - `schema_utils.py`: Topological sort for FK-aware table ordering
 
 **Phase 2: Data Generation** (`src/gen_data/`)
-- `data_generator.py`: Orchestrates generation with FK-aware ordering and PK pool management
-- `value_generators.py`: Faker-based value generation with temporal anchoring and inheritance logic
-- `relationship_rules.py`: Business logic for status transitions, segment/type alignment, currency consistency
-- `data_writers.py`: Writer implementations (CSV, SQLite, Parquet, Delta) with batching support
-- `metrics_collector.py`: Collects FK integrity, distribution, and relationship metrics
+
 
 **Reporting** (`src/reporting.py`)
 - Generates data quality reports with FK validation, categorical distributions, and relationship checks

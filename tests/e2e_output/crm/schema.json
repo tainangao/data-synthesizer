@@ -1,10 +1,10 @@
 {
   "schema_name": "CRM_Financial_Schema",
-  "domain": "Financial CRM",
+  "domain": "Financial Services CRM",
   "tables": [
     {
       "name": "Customers",
-      "description": "Master table containing information about individual customers.",
+      "description": "Master data for individual and organizational customers.",
       "columns": [
         {
           "name": "customer_id",
@@ -47,9 +47,9 @@
           "foreign_key": null
         },
         {
-          "name": "address_json",
-          "type": "JSON",
-          "field_role": "semi_structured",
+          "name": "address",
+          "type": "TEXT",
+          "field_role": "text",
           "nullable": true,
           "primary_key": false,
           "foreign_key": null
@@ -63,14 +63,6 @@
           "foreign_key": null
         },
         {
-          "name": "onboarding_date",
-          "type": "DATE",
-          "field_role": "temporal",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
           "name": "customer_segment",
           "type": "TEXT",
           "field_role": "categorical",
@@ -79,10 +71,18 @@
           "foreign_key": null
         },
         {
-          "name": "marketing_opt_in",
-          "type": "BOOLEAN",
-          "field_role": "boolean",
+          "name": "registration_date",
+          "type": "TIMESTAMP",
+          "field_role": "temporal",
           "nullable": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "marketing_preferences",
+          "type": "JSON",
+          "field_role": "semi_structured",
+          "nullable": true,
           "primary_key": false,
           "foreign_key": null
         }
@@ -90,7 +90,7 @@
     },
     {
       "name": "Accounts",
-      "description": "Details of financial accounts held by customers, including status lifecycle information.",
+      "description": "Financial accounts held by customers, including their status lifecycle.",
       "columns": [
         {
           "name": "account_id",
@@ -120,14 +120,6 @@
           "foreign_key": null
         },
         {
-          "name": "account_number",
-          "type": "TEXT",
-          "field_role": "identifier",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
           "name": "currency",
           "type": "TEXT",
           "field_role": "categorical",
@@ -152,15 +144,7 @@
           "foreign_key": null
         },
         {
-          "name": "closing_date",
-          "type": "DATE",
-          "field_role": "temporal",
-          "nullable": true,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "account_status",
+          "name": "status",
           "type": "TEXT",
           "field_role": "categorical",
           "nullable": false,
@@ -168,15 +152,23 @@
           "foreign_key": null
         },
         {
-          "name": "last_status_change_timestamp",
-          "type": "TIMESTAMP",
+          "name": "status_effective_date",
+          "type": "DATE",
           "field_role": "temporal",
           "nullable": false,
           "primary_key": false,
           "foreign_key": null
         },
         {
-          "name": "account_metadata_json",
+          "name": "last_activity_date",
+          "type": "TIMESTAMP",
+          "field_role": "temporal",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "account_details",
           "type": "JSON",
           "field_role": "semi_structured",
           "nullable": true,
@@ -187,7 +179,7 @@
     },
     {
       "name": "Transactions",
-      "description": "Record of all financial transactions associated with customer accounts.",
+      "description": "Records of all financial transactions associated with customer accounts.",
       "columns": [
         {
           "name": "transaction_id",
@@ -209,17 +201,17 @@
           }
         },
         {
-          "name": "transaction_timestamp",
-          "type": "TIMESTAMP",
-          "field_role": "temporal",
+          "name": "transaction_type",
+          "type": "TEXT",
+          "field_role": "categorical",
           "nullable": false,
           "primary_key": false,
           "foreign_key": null
         },
         {
-          "name": "transaction_type",
-          "type": "TEXT",
-          "field_role": "categorical",
+          "name": "transaction_date",
+          "type": "TIMESTAMP",
+          "field_role": "temporal",
           "nullable": false,
           "primary_key": false,
           "foreign_key": null
@@ -249,25 +241,9 @@
           "foreign_key": null
         },
         {
-          "name": "merchant_name",
-          "type": "TEXT",
-          "field_role": "text",
-          "nullable": true,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "status",
-          "type": "TEXT",
-          "field_role": "categorical",
-          "nullable": false,
-          "primary_key": false,
-          "foreign_key": null
-        },
-        {
-          "name": "processing_fees",
-          "type": "NUMERIC",
-          "field_role": "numerical",
+          "name": "merchant_details",
+          "type": "JSON",
+          "field_role": "semi_structured",
           "nullable": true,
           "primary_key": false,
           "foreign_key": null
@@ -275,8 +251,8 @@
       ]
     },
     {
-      "name": "Customer_Interactions",
-      "description": "Records of all interactions between the financial institution and its customers.",
+      "name": "CustomerInteractions",
+      "description": "Logs of all interactions (e.g., calls, emails, chats) with customers.",
       "columns": [
         {
           "name": "interaction_id",
@@ -298,7 +274,18 @@
           }
         },
         {
-          "name": "interaction_timestamp",
+          "name": "account_id",
+          "type": "INTEGER",
+          "field_role": "identifier",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": {
+            "table": "Accounts",
+            "column": "account_id"
+          }
+        },
+        {
+          "name": "interaction_date",
           "type": "TIMESTAMP",
           "field_role": "temporal",
           "nullable": false,
@@ -315,14 +302,14 @@
         },
         {
           "name": "agent_id",
-          "type": "INTEGER",
+          "type": "TEXT",
           "field_role": "identifier",
-          "nullable": true,
+          "nullable": false,
           "primary_key": false,
           "foreign_key": null
         },
         {
-          "name": "summary",
+          "name": "subject",
           "type": "TEXT",
           "field_role": "text",
           "nullable": true,
@@ -330,9 +317,17 @@
           "foreign_key": null
         },
         {
-          "name": "sentiment_score",
-          "type": "NUMERIC",
-          "field_role": "numerical",
+          "name": "notes",
+          "type": "TEXT",
+          "field_role": "text",
+          "nullable": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "sentiment",
+          "type": "TEXT",
+          "field_role": "categorical",
           "nullable": true,
           "primary_key": false,
           "foreign_key": null
@@ -346,7 +341,7 @@
           "foreign_key": null
         },
         {
-          "name": "interaction_details_json",
+          "name": "interaction_data",
           "type": "JSON",
           "field_role": "semi_structured",
           "nullable": true,

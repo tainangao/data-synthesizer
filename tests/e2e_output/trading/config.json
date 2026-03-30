@@ -9,6 +9,12 @@
     "Traders": {
       "fields": {}
     },
+    "Instruments": {
+      "fields": {}
+    },
+    "TradingAccounts": {
+      "fields": {}
+    },
     "Orders": {
       "fields": {
         "quantity": {
@@ -18,7 +24,14 @@
             "sigma": 0.8
           }
         },
-        "price": {
+        "price_limit": {
+          "distribution": "lognormal",
+          "params": {
+            "mean": 100,
+            "sigma": 0.5
+          }
+        },
+        "stop_price": {
           "distribution": "lognormal",
           "params": {
             "mean": 100,
@@ -27,7 +40,7 @@
         }
       }
     },
-    "TradeExecutions": {
+    "Executions": {
       "fields": {
         "executed_quantity": {
           "distribution": "lognormal",
@@ -50,15 +63,19 @@
     }
   },
   "generation_order": [
+    "Instruments",
     "Traders",
+    "TradingAccounts",
     "Orders",
-    "TradeExecutions",
+    "Executions",
     "Settlements"
   ],
   "table_counts": {
+    "Instruments": 200,
     "Traders": 1000,
+    "TradingAccounts": 1000,
     "Orders": 2500,
-    "TradeExecutions": 1000,
+    "Executions": 2500,
     "Settlements": 1600
   },
   "state_machines": {
@@ -79,7 +96,7 @@
             "base_prob": 0.2,
             "adjustments": [
               {
-                "field": "instrument_type",
+                "field": "order_type",
                 "direction": "higher_increases",
                 "strength": "weak"
               }
@@ -89,7 +106,7 @@
             "base_prob": 0.3,
             "adjustments": [
               {
-                "field": "instrument_type",
+                "field": "order_type",
                 "direction": "higher_increases",
                 "strength": "weak"
               }
@@ -109,7 +126,7 @@
             "base_prob": 0.6,
             "adjustments": [
               {
-                "field": "instrument_type",
+                "field": "order_type",
                 "direction": "higher_increases",
                 "strength": "weak"
               }
@@ -124,7 +141,7 @@
     }
   },
   "events": {
-    "TradeExecutions": {
+    "Executions": {
       "emitted_by": "Orders",
       "emit_when_states": [
         "Open",
@@ -135,7 +152,7 @@
         "lambda_base": 2.0,
         "lambda_modifiers": [
           {
-            "field": "instrument_type",
+            "field": "order_type",
             "effect": "higher_increases"
           }
         ]
@@ -153,7 +170,7 @@
         "lambda_base": 2.0,
         "lambda_modifiers": [
           {
-            "field": "instrument_type",
+            "field": "order_type",
             "effect": "higher_increases"
           }
         ]
@@ -166,8 +183,8 @@
       "type": "temporal_order",
       "params": {
         "fields": [
-          "settlement_date",
-          "last_update_timestamp"
+          "execution_time",
+          "settlement_date_expected"
         ]
       }
     }

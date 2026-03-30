@@ -4,7 +4,7 @@ import random
 from faker import Faker
 
 from src.utils.common import parse_datetime, random_datetime, safe_name, tokens
-from .relationship_rules import conditioned_relationship_value
+from gen_data_depricated.relationship_rules import conditioned_relationship_value
 
 
 def apply_nullable(col: dict, value: object) -> object:

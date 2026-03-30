@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.gen_data.translate_config import translate_and_validate
+from src.gen_config.translate_config import translate_and_validate
 
 # Test scenarios
 SCENARIOS = [

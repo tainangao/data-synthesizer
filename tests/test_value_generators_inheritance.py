@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from faker import Faker
 
-from src.gen_data.value_generators import non_key_value
+from gen_data_depricated.value_generators import non_key_value
 
 
 class NonKeyValueInheritanceTests(unittest.TestCase):
@@ -32,7 +32,7 @@ class NonKeyValueInheritanceTests(unittest.TestCase):
             }
         ]
 
-        with patch("src.gen_data.value_generators.random.random", return_value=0.0):
+        with patch("src.gen_config.value_generators.random.random", return_value=0.0):
             value, relationship_info = non_key_value(
                 fake=self.fake,
                 table_name="LoanAccounts",
@@ -61,7 +61,7 @@ class NonKeyValueInheritanceTests(unittest.TestCase):
 
         parent_profiles = [{"last_payment_date": "2024-12-01"}]
 
-        with patch("src.gen_data.value_generators.random.random", return_value=0.0):
+        with patch("src.gen_config.value_generators.random.random", return_value=0.0):
             value, relationship_info = non_key_value(
                 fake=self.fake,
                 table_name="PaymentHistory",

@@ -2,7 +2,7 @@ from pathlib import Path
 import logging
 
 from src.gen_schema import generate_schema, convert_schema, table_order
-from src.gen_data import (
+from src.gen_config import (
     generate_data,
     CSVWriter,
     SQLiteWriter,

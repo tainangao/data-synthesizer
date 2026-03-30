@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.gen_schema.schema_generator import generate_schema
-from src.gen_data.translate_config import translate_and_validate
+from src.gen_config.translate_config import translate_and_validate
 
 # Test scenarios
 SCENARIOS = [

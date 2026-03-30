@@ -6,10 +6,10 @@ from pathlib import Path
 
 from faker import Faker
 
-from .relationship_rules import build_relationship_context, value_matches
+from gen_data_depricated.relationship_rules import build_relationship_context, value_matches
 from src.gen_schema.schema_utils import pk_column, table_counts, table_order
 from .metrics_collector import update_metrics
-from .value_generators import (
+from gen_data_depricated.value_generators import (
     apply_nullable,
     non_key_value,
     pk_value,

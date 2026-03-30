@@ -62,7 +62,7 @@
         }
       }
     },
-    "Customer_Interactions": {
+    "CustomerInteractions": {
       "fields": {
         "interaction_type": {
           "distribution": "categorical",
@@ -80,18 +80,18 @@
   "generation_order": [
     "Customers",
     "Accounts",
-    "Customer_Interactions",
+    "CustomerInteractions",
     "Transactions"
   ],
   "table_counts": {
     "Customers": 1000,
     "Accounts": 1400,
-    "Customer_Interactions": 2500,
+    "CustomerInteractions": 1600,
     "Transactions": 2500
   },
   "state_machines": {
     "Accounts": {
-      "state_field": "account_status",
+      "state_field": "status",
       "initial_state": "Pending",
       "terminal_states": [
         "Closed"
@@ -200,7 +200,7 @@
       "params": {
         "fields": [
           "date_of_birth",
-          "onboarding_date"
+          "registration_date"
         ]
       }
     },
@@ -209,8 +209,8 @@
       "params": {
         "fields": [
           "opening_date",
-          "closing_date",
-          "last_status_change_timestamp"
+          "status_effective_date",
+          "last_activity_date"
         ]
       }
     }
