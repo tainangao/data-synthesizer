@@ -1,0 +1,162 @@
+{
+  "scenario_name": "crm",
+  "seed": 42,
+  "simulation": {
+    "start_date": "2025-03-30",
+    "end_date": "2026-03-30"
+  },
+  "entities": {
+    "Customers": {
+      "fields": {
+        "age": {
+          "distribution": "normal",
+          "params": {
+            "mean": 35,
+            "std": 12
+          }
+        },
+        "income": {
+          "distribution": "lognormal",
+          "params": {
+            "mean": 60000,
+            "sigma": 0.5
+          }
+        }
+      }
+    },
+    "Accounts": {
+      "fields": {}
+    },
+    "AccountStatusHistory": {
+      "fields": {}
+    },
+    "Transactions": {
+      "fields": {}
+    },
+    "CustomerInteractions": {
+      "fields": {}
+    }
+  },
+  "generation_order": [
+    "Customers",
+    "Accounts",
+    "AccountStatusHistory",
+    "CustomerInteractions",
+    "Transactions"
+  ],
+  "table_counts": {
+    "Customers": 1000,
+    "Accounts": 1400,
+    "AccountStatusHistory": 1600,
+    "CustomerInteractions": 1600,
+    "Transactions": 2500
+  },
+  "state_machines": {
+    "Accounts": {
+      "state_field": "current_status",
+      "initial_state": "Pending",
+      "terminal_states": [
+        "Closed"
+      ],
+      "transitions": {
+        "Pending": {
+          "Active": {
+            "base_prob": 0.85,
+            "adjustments": []
+          },
+          "Closed": {
+            "base_prob": 0.15,
+            "adjustments": []
+          }
+        },
+        "Active": {
+          "Active": {
+            "base_prob": 0.85,
+            "adjustments": []
+          },
+          "Dormant": {
+            "base_prob": 0.14,
+            "adjustments": []
+          },
+          "Closed": {
+            "base_prob": 0.01,
+            "adjustments": []
+          }
+        },
+        "Dormant": {
+          "Active": {
+            "base_prob": 0.1,
+            "adjustments": []
+          },
+          "Dormant": {
+            "base_prob": 0.8,
+            "adjustments": []
+          },
+          "Closed": {
+            "base_prob": 0.1,
+            "adjustments": []
+          }
+        }
+      }
+    }
+  },
+  "events": {
+    "AccountStatusHistory": {
+      "emitted_by": "Accounts",
+      "emit_when_states": [
+        "Active"
+      ],
+      "frequency": {
+        "distribution": "poisson",
+        "lambda_base": 5.0,
+        "lambda_modifiers": []
+      },
+      "fields": {}
+    },
+    "Transactions": {
+      "emitted_by": "Accounts",
+      "emit_when_states": [
+        "Active"
+      ],
+      "frequency": {
+        "distribution": "poisson",
+        "lambda_base": 5.0,
+        "lambda_modifiers": []
+      },
+      "fields": {}
+    },
+    "CustomerInteractions": {
+      "emitted_by": "Accounts",
+      "emit_when_states": [
+        "Active"
+      ],
+      "frequency": {
+        "distribution": "poisson",
+        "lambda_base": 5.0,
+        "lambda_modifiers": []
+      },
+      "fields": {}
+    }
+  },
+  "constraints": [
+    {
+      "type": "temporal_order",
+      "params": {
+        "fields": [
+          "date_of_birth",
+          "created_at",
+          "updated_at"
+        ]
+      }
+    },
+    {
+      "type": "temporal_order",
+      "params": {
+        "fields": [
+          "opening_date",
+          "last_activity_at"
+        ]
+      }
+    }
+  ]
+}

@@ -24,7 +24,7 @@ SCENARIOS = [
     {
         "name": "trading",
         "prompt": "Trading platform with traders, orders, executions, and settlements",
-        "schema_file": None
+        "schema_file": 'tests/e2e_output/trading/schema.json'
     }
 ]
 

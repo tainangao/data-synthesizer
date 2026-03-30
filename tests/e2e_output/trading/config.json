@@ -1,0 +1,151 @@
+{
+  "scenario_name": "trading",
+  "seed": 42,
+  "simulation": {
+    "start_date": "2025-03-30",
+    "end_date": "2026-03-30"
+  },
+  "entities": {
+    "Instruments": {
+      "fields": {}
+    },
+    "Traders": {
+      "fields": {
+        "trader_type": {
+          "distribution": "categorical",
+          "params": {
+            "categories": [
+              "Retail",
+              "Institutional",
+              "HFT"
+            ]
+          }
+        }
+      }
+    },
+    "Orders": {
+      "fields": {}
+    },
+    "TradeExecutions": {
+      "fields": {}
+    },
+    "Settlements": {
+      "fields": {}
+    }
+  },
+  "generation_order": [
+    "Instruments",
+    "Traders",
+    "Orders",
+    "TradeExecutions",
+    "Settlements"
+  ],
+  "table_counts": {
+    "Instruments": 200,
+    "Traders": 1000,
+    "Orders": 2500,
+    "TradeExecutions": 1000,
+    "Settlements": 1600
+  },
+  "state_machines": {
+    "Orders": {
+      "state_field": "current_status",
+      "initial_state": "Open",
+      "terminal_states": [
+        "Filled",
+        "Cancelled"
+      ],
+      "transitions": {
+        "Open": {
+          "Open": {
+            "base_prob": 0.4,
+            "adjustments": []
+          },
+          "Partial Fill": {
+            "base_prob": 0.2,
+            "adjustments": []
+          },
+          "Filled": {
+            "base_prob": 0.3,
+            "adjustments": []
+          },
+          "Cancelled": {
+            "base_prob": 0.1,
+            "adjustments": []
+          }
+        },
+        "Partial Fill": {
+          "Partial Fill": {
+            "base_prob": 0.3,
+            "adjustments": []
+          },
+          "Filled": {
+            "base_prob": 0.6,
+            "adjustments": []
+          },
+          "Cancelled": {
+            "base_prob": 0.1,
+            "adjustments": []
+          }
+        }
+      }
+    }
+  },
+  "events": {
+    "Traders": {
+      "emitted_by": "Orders",
+      "emit_when_states": [
+        "Open",
+        "Partial Fill"
+      ],
+      "frequency": {
+        "distribution": "poisson",
+        "lambda_base": 2.0,
+        "lambda_modifiers": []
+      },
+      "fields": {}
+    },
+    "TradeExecutions": {
+      "emitted_by": "Orders",
+      "emit_when_states": [
+        "Open",
+        "Partial Fill"
+      ],
+      "frequency": {
+        "distribution": "poisson",
+        "lambda_base": 2.0,
+        "lambda_modifiers": []
+      },
+      "fields": {}
+    }
+  },
+  "constraints": [
+    {
+      "type": "temporal_order",
+      "params": {
+        "fields": [
+          "order_timestamp",
+          "expiration_timestamp"
+        ]
+      }
+    },
+    {
+      "type": "temporal_order",
+      "params": {
+        "fields": [
+          "execution_timestamp",
+          "settlement_date_expected"
+        ]
+      }
+    },
+    {
+      "type": "temporal_order",
+      "params": {
+        "fields": [
+          "settlement_date",
+          "actual_settlement_date"
+        ]
+      }
+    }
+  ]
+}

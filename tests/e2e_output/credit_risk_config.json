@@ -1,0 +1,68 @@
+{
+  "scenario_name": "credit_risk",
+  "seed": 42,
+  "simulation": {
+    "start_date": "2025-03-30",
+    "end_date": "2026-03-30"
+  },
+  "entities": {
+    "Customers": {
+      "fields": {
+        "credit_score": {
+          "distribution": "normal",
+          "params": {
+            "mean": 650,
+            "std": 100
+          }
+        },
+        "income": {
+          "distribution": "lognormal",
+          "params": {
+            "mean": 60000,
+            "sigma": 0.5
+          }
+        }
+      }
+    },
+    "CreditApplications": {
+      "fields": {}
+    },
+    "CreditScores": {
+      "fields": {}
+    }
+  },
+  "generation_order": [
+    "Customers",
+    "CreditApplications",
+    "CreditScores"
+  ],
+  "table_counts": {
+    "Customers": 1000,
+    "CreditApplications": 1600,
+    "CreditScores": 1600
+  },
+  "state_machines": {
+    "CreditApplications": {
+      "state_field": "application_status",
+      "initial_state": "Pending",
+      "terminal_states": [
+        "Approved",
+        "Rejected"
+      ],
+      "transitions": {
+        "Pending": {
+          "Approved": {
+            "base_prob": 0.7,
+            "adjustments": []
+          },
+          "Rejected": {
+            "base_prob": 0.3,
+            "adjustments": []
+          }
+        }
+      }
+    }
+  },
+  "events": {},
+  "constraints": []
+}

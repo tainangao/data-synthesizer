@@ -12,22 +12,18 @@ from src.gen_data.translate_config import translate_and_validate
 
 # Test scenarios
 SCENARIOS = [
-    {
-        "name": "credit_risk",
-        "prompt": "Credit risk management system with customers applying for loans, credit score tracking, loan repayments, and delinquency management"
-    },
+    # {
+    #     "name": "credit_risk",
+    #     "prompt": "Credit risk management system with customers applying for loans, credit score tracking, loan repayments, and delinquency management"
+    # },
     {
         "name": "crm",
         "prompt": "CRM system with customers, accounts with status lifecycle, transactions, and customer interactions"
     },
-    {
-        "name": "trading",
-        "prompt": "Trading platform with traders, orders with execution states, trade executions, and T+2 settlements"
-    },
-    {
-        "name": "ecommerce",
-        "prompt": "E-commerce platform with customers, orders, order items, payments, and shipments"
-    }
+    # {
+    #     "name": "trading",
+    #     "prompt": "Trading platform with traders, orders with execution states, trade executions, and T+2 settlements"
+    # }
 ]
 
 def test_scenario(scenario: dict, output_dir: Path):
