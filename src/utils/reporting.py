@@ -1,123 +1,157 @@
+"""Data quality reporting for gen_data output.
+
+Computes FK integrity, categorical distributions, numerical summaries,
+and null rates directly from Polars DataFrames.
+"""
+
 import json
 from pathlib import Path
 
-
-def _percentile(values: list[int], pct: float) -> float | None:
-    if not values:
-        return None
-    ordered = sorted(values)
-    if len(ordered) == 1:
-        return float(ordered[0])
-
-    rank = (pct / 100.0) * (len(ordered) - 1)
-    low = int(rank)
-    high = min(low + 1, len(ordered) - 1)
-    weight = rank - low
-    return ordered[low] * (1.0 - weight) + ordered[high] * weight
+import polars as pl
 
 
-def build_quality_report(schema: dict, summary: dict, metrics: dict, seed: int, out_dir: str | Path) -> dict:
-    categorical = {}
-    for key, counts in metrics["categorical_counts"].items():
-        categorical[key] = [
-            {"value": value, "count": count} for value, count in counts.most_common(6)
-        ]
+def build_quality_report(
+    schema: dict,
+    row_counts: dict[str, int],
+    seed: int,
+    out_dir: Path,
+    csv_dir: Path | None = None,
+) -> dict:
+    """Build a data quality report from generated CSV files.
 
-    numerical = {}
-    for key, stats in metrics["numeric_stats"].items():
-        if stats["count"] == 0:
+    Args:
+        schema: JSON schema (tables + columns)
+        row_counts: {table_name: row_count} from generate_data()
+        seed: Random seed used for generation
+        out_dir: Directory to write data_quality_report.json
+        csv_dir: Directory containing generated CSV files (defaults to out_dir/csv)
+
+    Returns:
+        Quality report dict (also written to out_dir/data_quality_report.json)
+    """
+    csv_dir = csv_dir or (out_dir / "csv")
+
+    tables_by_name = {t["name"]: t for t in schema["tables"]}
+    table_dfs: dict[str, pl.DataFrame] = {}
+
+    # Load all CSVs into DataFrames for analysis
+    for table_name in row_counts:
+        safe = _safe_name(table_name)
+        csv_path = csv_dir / f"{safe}.csv"
+        if csv_path.exists():
+            try:
+                table_dfs[table_name] = pl.read_csv(csv_path, infer_schema_length=10000)
+            except Exception:
+                pass
+
+    fk_integrity: dict = {}
+    categorical_distributions: dict = {}
+    numerical_summaries: dict = {}
+    null_rates: dict = {}
+
+    for table_name, df in table_dfs.items():
+        table = tables_by_name.get(table_name)
+        if table is None:
             continue
-        numerical[key] = {
-            "count": stats["count"],
-            "min": round(stats["min"], 4) if stats["min"] is not None else None,
-            "max": round(stats["max"], 4) if stats["max"] is not None else None,
-            "avg": round(stats["sum"] / stats["count"], 4),
-        }
 
-    fk_integrity = {}
-    for key, stats in metrics["fk_stats"].items():
-        fk_integrity[key] = {
-            "rows": stats["rows"],
-            "nulls": stats["nulls"],
-            "invalid": stats["invalid"],
-            "valid_rate": round((stats["rows"] - stats["invalid"]) / stats["rows"], 4)
-            if stats["rows"]
-            else 1.0,
-        }
+        # ── FK integrity ────────────────────────────────────────────
+        for col in table["columns"]:
+            fk = col.get("foreign_key")
+            if not fk:
+                continue
+            col_name = col["name"]
+            parent_table = fk["table"]
+            parent_pk_col = fk["column"]
+            if col_name not in df.columns:
+                continue
 
-    parent_child_distribution = {}
-    for key, parent_counts in metrics.get("fk_child_counts", {}).items():
-        counts = list(parent_counts.values())
-        total_children = sum(counts)
-        distinct_parents = len(counts)
-        p95 = _percentile(counts, 95.0)
+            parent_df = table_dfs.get(parent_table)
+            total = len(df)
+            nulls = df[col_name].null_count()
 
-        parent_child_distribution[key] = {
-            "total_child_rows": total_children,
-            "distinct_parent_keys": distinct_parents,
-            "avg_children_per_parent": round(total_children / distinct_parents, 4)
-            if distinct_parents
-            else None,
-            "max_children_per_parent": max(counts) if counts else 0,
-            "p95_children_per_parent": round(p95, 4) if p95 is not None else None,
-        }
+            if parent_df is not None and parent_pk_col in parent_df.columns:
+                parent_pks = set(parent_df[parent_pk_col].drop_nulls().to_list())
+                fk_vals = df[col_name].drop_nulls().to_list()
+                invalid = sum(1 for v in fk_vals if v not in parent_pks)
+            else:
+                invalid = 0
 
-    parent_child_consistency = {}
-    rule_summary = {}
-    for key, stats in metrics.get("relationship_checks", {}).items():
-        rows = int(stats.get("rows", 0) or 0)
-        nulls = int(stats.get("nulls", 0) or 0)
-        aligned = int(stats.get("aligned", 0) or 0)
-        non_null_rows = max(rows - nulls, 0)
-        rule = str(stats.get("rule", "") or "token_overlap_copy")
+            key = f"{table_name}.{col_name} → {parent_table}.{parent_pk_col}"
+            fk_integrity[key] = {
+                "total_rows": total,
+                "null_fks": nulls,
+                "invalid_fks": invalid,
+                "valid_rate": round((total - nulls - invalid) / total, 4) if total else 1.0,
+            }
 
-        parent_child_consistency[key] = {
-            "rule": rule,
-            "rows": rows,
-            "nulls": nulls,
-            "aligned": aligned,
-            "alignment_rate": round(aligned / non_null_rows, 4)
-            if non_null_rows
-            else None,
-        }
+        # ── Categorical distributions ────────────────────────────────
+        for col in table["columns"]:
+            if col.get("field_role") != "categorical":
+                continue
+            col_name = col["name"]
+            if col_name not in df.columns:
+                continue
+            counts = (
+                df[col_name]
+                .drop_nulls()
+                .value_counts()
+                .sort("count", descending=True)
+                .head(10)
+            )
+            key = f"{table_name}.{col_name}"
+            categorical_distributions[key] = [
+                {"value": str(row[col_name]), "count": row["count"]}
+                for row in counts.iter_rows(named=True)
+            ]
 
-        aggregate = rule_summary.setdefault(
-            rule,
-            {"rows": 0, "nulls": 0, "aligned": 0},
-        )
-        aggregate["rows"] += rows
-        aggregate["nulls"] += nulls
-        aggregate["aligned"] += aligned
+        # ── Numerical summaries ──────────────────────────────────────
+        for col in table["columns"]:
+            if col.get("field_role") != "numerical":
+                continue
+            col_name = col["name"]
+            if col_name not in df.columns:
+                continue
+            series = df[col_name].drop_nulls().cast(pl.Float64, strict=False).drop_nulls()
+            if len(series) == 0:
+                continue
+            key = f"{table_name}.{col_name}"
+            numerical_summaries[key] = {
+                "count": len(series),
+                "min": round(series.min(), 4),
+                "max": round(series.max(), 4),
+                "mean": round(series.mean(), 4),
+                "std": round(series.std(), 4),
+            }
 
-    relationship_rule_summary = {}
-    for rule, stats in rule_summary.items():
-        non_null_rows = max(stats["rows"] - stats["nulls"], 0)
-        relationship_rule_summary[rule] = {
-            "rows": stats["rows"],
-            "nulls": stats["nulls"],
-            "aligned": stats["aligned"],
-            "alignment_rate": round(stats["aligned"] / non_null_rows, 4)
-            if non_null_rows
-            else None,
-        }
+        # ── Null rates ───────────────────────────────────────────────
+        total = len(df)
+        for col_name in df.columns:
+            nulls = df[col_name].null_count()
+            if nulls > 0:
+                null_rates[f"{table_name}.{col_name}"] = {
+                    "nulls": nulls,
+                    "null_rate": round(nulls / total, 4) if total else 0.0,
+                }
 
     report = {
         "schema_name": schema.get("schema_name"),
         "domain": schema.get("domain"),
         "seed": seed,
-        "records_per_table": summary,
+        "row_counts": row_counts,
         "fk_integrity": fk_integrity,
-        "parent_child_distribution": parent_child_distribution,
-        "parent_child_consistency": parent_child_consistency,
-        "relationship_rule_summary": relationship_rule_summary,
-        "categorical_distributions": categorical,
-        "numerical_summaries": numerical,
-        "null_counts": dict(metrics["null_counts"]),
+        "categorical_distributions": categorical_distributions,
+        "numerical_summaries": numerical_summaries,
+        "null_rates": null_rates,
     }
-    
+
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "data_quality_report.json").write_text(
-            json.dumps(report, indent=2), encoding="utf-8"
-        )
+        json.dumps(report, indent=2, default=str), encoding="utf-8"
+    )
 
     return report
+
+
+def _safe_name(name: str) -> str:
+    import re
+    return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")

@@ -67,14 +67,14 @@ def main():
 
     logger.info(f"\nData generation complete: {row_counts}")
 
-    # TODO: Update reporting to work with new gen_data
-    # report = build_quality_report(
-    #     schema=schema,
-    #     summary=summary,
-    #     metrics=metrics,
-    #     seed=SEED,
-    #     out_dir=OP_DIR,
-    # )
+    # Generate quality report
+    report = build_quality_report(
+        schema=schema,
+        row_counts=row_counts,
+        seed=SEED,
+        out_dir=OP_DIR,
+    )
+    logger.info(f"Quality report written to {OP_DIR / 'data_quality_report.json'}")
 
 
 if __name__ == "__main__":

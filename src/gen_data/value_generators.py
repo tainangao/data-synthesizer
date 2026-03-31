@@ -125,33 +125,46 @@ def generate_temporal_column(
     simulation_start: str | None = None,
     simulation_end: str | None = None,
     anchor_series: list[datetime] | None = None,
+    parent_temporal: list | None = None,
 ) -> list[datetime]:
     """Batch-generate temporal values.
 
     Args:
-        anchor_series: Optional list of per-row anchor datetimes (e.g. from a
-            previously generated temporal column in the same table).
+        anchor_series: Per-row anchor from an earlier column in the same table
+            (e.g. start_date → used to generate end_date).
+        parent_temporal: Per-row floor from the parent table's date column
+            (e.g. account_open_date → used so transaction_date ≥ account_open_date).
     """
     col_name = col["name"].lower()
 
     start_dt = datetime.fromisoformat(simulation_start) if simulation_start else datetime(2020, 1, 1)
     end_dt = datetime.fromisoformat(simulation_end) if simulation_end else datetime(2024, 12, 31)
 
-    # Birth dates
+    # Birth dates — not affected by parent floor
     if "birth" in col_name or "dob" in col_name:
         now = datetime.now()
         return [now - timedelta(days=int(rng.gauss(35, 12)) * 365) for _ in range(count)]
 
-    # Relative dates (need an anchor)
+    # Relative dates anchored within the same row
     if anchor_series is not None:
         if "end" in col_name or "close" in col_name or "maturity" in col_name:
             return [a + timedelta(days=rng.randint(30, 365)) for a in anchor_series]
         elif "due" in col_name or "scheduled" in col_name:
             return [a + timedelta(days=rng.randint(1, 90)) for a in anchor_series]
 
-    # Random date in simulation range
+    # Use parent temporal as a per-row floor so child dates ≥ parent dates
     delta_days = (end_dt - start_dt).days
-    return [start_dt + timedelta(days=rng.randint(0, delta_days)) for _ in range(count)]
+    results = []
+    for i in range(count):
+        floor = None
+        if parent_temporal is not None and i < len(parent_temporal):
+            pt = parent_temporal[i]
+            if pt is not None:
+                floor = pt if isinstance(pt, datetime) else datetime.combine(pt, datetime.min.time())
+        effective_start = max(floor, start_dt) if floor else start_dt
+        effective_delta = max((end_dt - effective_start).days, 0)
+        results.append(effective_start + timedelta(days=rng.randint(0, effective_delta) if effective_delta > 0 else 0))
+    return results
 
 
 def generate_semi_structured_column(
@@ -164,31 +177,73 @@ def generate_semi_structured_column(
     results = []
     for _ in range(count):
         if col_type == "XML":
-            root = ET.Element("data")
-            ET.SubElement(root, "field1").text = fake.word()
-            ET.SubElement(root, "field2").text = str(rng.randint(1, 100))
-            results.append(ET.tostring(root, encoding="unicode"))
+            results.append(_generate_xml(col_name, rng, fake))
         elif "preference" in col_name or "settings" in col_name:
             results.append(json.dumps({
                 "language": rng.choice(["en", "es", "fr", "de"]),
                 "notifications": rng.choice([True, False]),
                 "theme": rng.choice(["light", "dark"]),
+                "marketing_opt_in": rng.choice([True, False]),
             }))
         elif "risk" in col_name and "model" in col_name:
             results.append(json.dumps({
                 "score": round(rng.gauss(650, 100), 2),
                 "tier": rng.choice(["Low", "Medium", "High"]),
                 "factors": [fake.word() for _ in range(rng.randint(2, 4))],
+                "model_version": f"v{rng.randint(1, 5)}.{rng.randint(0, 9)}",
             }))
-        elif "metadata" in col_name or "data" in col_name:
+        elif "address" in col_name or "location" in col_name:
             results.append(json.dumps({
-                "key1": fake.word(),
-                "key2": rng.randint(1, 100),
-                "key3": rng.choice([True, False]),
+                "street": fake.street_address(),
+                "city": fake.city(),
+                "country": fake.country_code(),
+                "postal_code": fake.postcode(),
+            }))
+        elif "metadata" in col_name or "attribute" in col_name or "data" in col_name:
+            results.append(json.dumps({
+                "source": rng.choice(["web", "mobile", "branch", "api"]),
+                "created_by": fake.user_name(),
+                "tags": [fake.word() for _ in range(rng.randint(1, 3))],
             }))
         else:
-            results.append(json.dumps({"value": fake.word(), "count": rng.randint(1, 10)}))
+            results.append(json.dumps({
+                "value": fake.word(),
+                "count": rng.randint(1, 10),
+                "active": rng.choice([True, False]),
+            }))
     return results
+
+
+def _generate_xml(col_name: str, rng: random.Random, fake: Faker) -> str:
+    """Generate domain-aware XML based on column name semantics."""
+    if "transaction" in col_name or "payment" in col_name:
+        root = ET.Element("transaction")
+        ET.SubElement(root, "amount", currency=rng.choice(["USD", "EUR", "GBP"])).text = str(round(rng.lognormvariate(6, 1), 2))
+        ET.SubElement(root, "channel").text = rng.choice(["online", "branch", "mobile", "atm"])
+        ET.SubElement(root, "reference").text = fake.bothify("TXN-????-########")
+    elif "risk" in col_name or "score" in col_name:
+        root = ET.Element("risk_assessment")
+        ET.SubElement(root, "score").text = str(round(rng.gauss(650, 100), 1))
+        ET.SubElement(root, "grade").text = rng.choice(["A", "B", "C", "D"])
+        factors = ET.SubElement(root, "factors")
+        for _ in range(rng.randint(1, 3)):
+            ET.SubElement(factors, "factor").text = fake.word()
+    elif "profile" in col_name or "customer" in col_name:
+        root = ET.Element("profile")
+        ET.SubElement(root, "segment").text = rng.choice(["Retail", "Affluent", "Premium"])
+        ET.SubElement(root, "channel").text = rng.choice(["online", "branch", "referral"])
+        ET.SubElement(root, "since").text = str(rng.randint(2010, 2024))
+    elif "order" in col_name or "trade" in col_name:
+        root = ET.Element("order_details")
+        ET.SubElement(root, "instrument").text = fake.lexify("????").upper()
+        ET.SubElement(root, "quantity").text = str(rng.randint(1, 10000))
+        ET.SubElement(root, "price").text = str(round(rng.uniform(1, 500), 2))
+    else:
+        root = ET.Element("data")
+        ET.SubElement(root, "id").text = fake.bothify("??-######")
+        ET.SubElement(root, "value").text = fake.word()
+        ET.SubElement(root, "status").text = rng.choice(["active", "inactive", "pending"])
+    return ET.tostring(root, encoding="unicode")
 
 
 def generate_boolean_column(
@@ -217,6 +272,7 @@ def generate_column(
     simulation_start: str | None = None,
     simulation_end: str | None = None,
     anchor_series: list[datetime] | None = None,
+    parent_temporal: list | None = None,
 ) -> list:
     """Dispatch to the appropriate batch generator based on field_role."""
     role = col.get("field_role", "text")
@@ -230,7 +286,9 @@ def generate_column(
     elif role == "text":
         return generate_text_column(col, count, fake)
     elif role == "temporal":
-        return generate_temporal_column(col, count, rng, simulation_start, simulation_end, anchor_series)
+        return generate_temporal_column(
+            col, count, rng, simulation_start, simulation_end, anchor_series, parent_temporal
+        )
     elif role == "semi_structured":
         return generate_semi_structured_column(col, count, rng, fake)
     elif role == "boolean":
@@ -251,12 +309,12 @@ def find_inheritable_field(col: dict, parent_columns: list[str]) -> str | None:
     """
     col_name = col["name"].lower()
 
-    # Direct match
+    # Direct exact match
     if col["name"] in parent_columns:
         return col["name"]
 
-    # Semantic token match
-    tokens = ["currency", "country", "segment"]
+    # Semantic token match — extended to cover common financial field patterns
+    tokens = ["currency", "country", "segment", "risk", "type", "channel", "status", "grade"]
     for token in tokens:
         if token in col_name:
             for pcol in parent_columns:
