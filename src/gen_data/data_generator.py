@@ -100,6 +100,9 @@ def generate_data(
 
         row_counts[event_table_name] = len(df)
 
+    # Apply data-driven lifecycle triggers
+    _apply_lifecycle_triggers(state, tables_by_name, events, writers)
+
     # Close all writers
     for writer in writers:
         writer.close()
@@ -396,7 +399,8 @@ def _generate_event_table(
         logger.info(f"  No eligible parents for {table['name']} (states: {emit_when_states})")
         return pl.DataFrame()
 
-    lambdas = calculate_lambdas_batch(lambda_base, lambda_modifiers, eligible)
+    temporal_col = _find_temporal_col(eligible)
+    lambdas = calculate_lambdas_batch(lambda_base, lambda_modifiers, eligible, temporal_col)
     event_counts = sample_event_counts_batch(lambdas, rng.randint(0, 2**31))
 
     total_events = int(event_counts.sum())
@@ -549,6 +553,112 @@ def _find_temporal_col(df: pl.DataFrame) -> str | None:
     return None
 
 
+def _find_column_by_pattern(df: pl.DataFrame, patterns: list[str]) -> str | None:
+    """Find first column matching any of the given patterns."""
+    for col_name in df.columns:
+        col_lower = col_name.lower()
+        if any(pattern in col_lower for pattern in patterns):
+            return col_name
+    return None
+
+
+def _apply_lifecycle_triggers(
+    state: dict,
+    tables_by_name: dict,
+    events: dict,
+    writers: list,
+) -> None:
+    """Apply data-driven lifecycle triggers (dormancy, delinquency, default, charged-off)."""
+    from datetime import timedelta
+
+    modified_tables = set()
+
+    for parent_table_name, event_config in events.items():
+        parent_table = event_config.get("emitted_by")
+        if not parent_table:
+            continue
+
+        parent_df = state["table_dfs"].get(parent_table)
+        if parent_df is None or parent_df.is_empty():
+            continue
+
+        state_field = _find_state_field(parent_df)
+        if not state_field:
+            continue
+
+        temporal_col = _find_temporal_col(parent_df)
+        if not temporal_col:
+            continue
+
+        max_date = parent_df[temporal_col].max()
+        if not max_date:
+            continue
+
+        updated = parent_df
+
+        # Dormancy trigger: no activity for 90+ days (CRM/Account scenarios)
+        if "Active" in parent_df[state_field].unique().to_list():
+            dormancy_threshold = max_date - timedelta(days=90)
+            updated = updated.with_columns(
+                pl.when(
+                    (pl.col(temporal_col) < dormancy_threshold) &
+                    (pl.col(state_field) == "Active")
+                ).then(pl.lit("Dormant"))
+                .otherwise(pl.col(state_field))
+                .alias(state_field)
+            )
+
+        # Delinquency trigger: payment overdue (Credit Risk scenarios)
+        if "Current" in parent_df[state_field].unique().to_list():
+            due_date_col = _find_column_by_pattern(parent_df, ["due_date", "scheduled_date", "payment_date"])
+            days_past_due_col = _find_column_by_pattern(parent_df, ["days_past_due", "dpd"])
+
+            if due_date_col and days_past_due_col:
+                updated = updated.with_columns(
+                    pl.when(
+                        (pl.col(due_date_col) < max_date) &
+                        (pl.col(state_field) == "Current")
+                    ).then(pl.lit("Delinquent"))
+                    .otherwise(pl.col(state_field))
+                    .alias(state_field)
+                )
+
+        # Default trigger: delinquent for 90+ days (Credit Risk scenarios)
+        if "Delinquent" in parent_df[state_field].unique().to_list():
+            default_threshold = max_date - timedelta(days=90)
+            updated = updated.with_columns(
+                pl.when(
+                    (pl.col(temporal_col) < default_threshold) &
+                    (pl.col(state_field) == "Delinquent")
+                ).then(pl.lit("Default"))
+                .otherwise(pl.col(state_field))
+                .alias(state_field)
+            )
+
+        # Charged-off trigger: default for 180+ days (Credit Risk scenarios)
+        if "Default" in parent_df[state_field].unique().to_list():
+            chargeoff_threshold = max_date - timedelta(days=180)
+            updated = updated.with_columns(
+                pl.when(
+                    (pl.col(temporal_col) < chargeoff_threshold) &
+                    (pl.col(state_field) == "Default")
+                ).then(pl.lit("Charged-off"))
+                .otherwise(pl.col(state_field))
+                .alias(state_field)
+            )
+
+        if not updated.equals(parent_df):
+            state["table_dfs"][parent_table] = updated
+            modified_tables.add(parent_table)
+
+    # Rewrite all modified parent tables once
+    for table_name in modified_tables:
+        table_def = tables_by_name[table_name]
+        updated_df = state["table_dfs"][table_name]
+        for writer in writers:
+            writer.write_dataframe(table_def, updated_df)
+
+
 def _update_parent_balance(
     event_table: dict,
     event_df: pl.DataFrame,
@@ -621,7 +731,4 @@ def _update_parent_balance(
 
     state["table_dfs"][parent_table_name] = updated_parent
 
-    # Rewrite parent table with updated balances
-    parent_table_def = tables_by_name[parent_table_name]
-    for writer in writers:
-        writer.write_dataframe(parent_table_def, updated_parent)
+    # Don't rewrite here - will be rewritten after lifecycle triggers

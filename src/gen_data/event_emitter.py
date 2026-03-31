@@ -14,17 +14,19 @@ def calculate_lambdas_batch(
     lambda_base: float,
     lambda_modifiers: list[dict],
     parent_df: pl.DataFrame,
+    temporal_col: str | None = None,
 ) -> np.ndarray:
     """Vectorized lambda calculation for all parent rows.
 
-    Adjusts Poisson lambda based on parent row features.
+    Adjusts Poisson lambda based on parent row features and temporal patterns.
     Example: Higher account_balance increases transaction frequency.
 
     Process:
     1. Start with base lambda for all rows
     2. For each modifier, normalize feature values to 0-1
     3. Apply effect: higher_increases multiplies lambda by (1 + 0.5 * normalized)
-    4. Clip to minimum 0.1 to avoid zero events
+    4. Apply seasonality if temporal column provided
+    5. Clip to minimum 0.1 to avoid zero events
 
     Returns an ndarray of adjusted lambda values, one per parent row.
     """
@@ -37,6 +39,16 @@ def calculate_lambdas_batch(
             continue
 
         col = parent_df[field]
+
+        # Handle categorical profile fields
+        if col.dtype == pl.Utf8 or col.dtype == pl.String:
+            profile_multipliers = {"Conservative": 0.7, "Moderate": 1.0, "Aggressive": 1.5,
+                                   "Mass": 0.8, "Affluent": 1.2, "Premium": 1.8}
+            values = col.to_list()
+            multipliers = np.array([profile_multipliers.get(v, 1.0) for v in values])
+            lambdas *= multipliers
+            continue
+
         if col.dtype not in (pl.Float64, pl.Float32, pl.Int64, pl.Int32, pl.Int16, pl.Int8):
             continue
 
@@ -54,6 +66,10 @@ def calculate_lambdas_batch(
             lambdas *= (1 + STRENGTH_FACTOR * normalized)
         elif effect == "higher_decreases":
             lambdas *= (1 - STRENGTH_FACTOR * normalized)
+
+    # Apply seasonality
+    if temporal_col and temporal_col in parent_df.columns:
+        lambdas = _apply_seasonality(lambdas, parent_df[temporal_col])
 
     return np.clip(lambdas, 0.1, None)
 
@@ -75,3 +91,23 @@ def filter_eligible_parents(
     if not emit_when_states or not state_field or state_field not in parent_df.columns:
         return parent_df
     return parent_df.filter(pl.col(state_field).is_in(emit_when_states))
+
+
+def _apply_seasonality(lambdas: np.ndarray, temporal_col: pl.Series) -> np.ndarray:
+    """Apply monthly seasonality patterns to lambda values."""
+    if temporal_col.dtype not in (pl.Date, pl.Datetime):
+        return lambdas
+
+    dates = temporal_col.to_numpy()
+    months = np.array([d.month if hasattr(d, 'month') else 1 for d in dates])
+
+    # Monthly multipliers (salary cycles, end-of-month patterns)
+    # Higher activity at month start (1-5) and end (25-31)
+    day_of_month = np.array([d.day if hasattr(d, 'day') else 15 for d in dates])
+    seasonal_factor = np.where(
+        (day_of_month <= 5) | (day_of_month >= 25),
+        1.3,  # 30% increase at month boundaries
+        1.0
+    )
+
+    return lambdas * seasonal_factor

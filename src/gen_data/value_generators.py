@@ -77,6 +77,8 @@ def generate_categorical_column(
     col_name = col["name"].lower()
     if "status" in col_name or "state" in col_name:
         return rng.choices(["Active", "Inactive", "Pending", "Closed"], weights=[70, 10, 12, 8], k=count)
+    elif "profile" in col_name or "behavior" in col_name:
+        return rng.choices(["Conservative", "Moderate", "Aggressive"], weights=[50, 35, 15], k=count)
     elif "segment" in col_name:
         return rng.choices(["Mass", "Affluent", "Premium"], weights=[60, 30, 10], k=count)
     elif "risk" in col_name:
