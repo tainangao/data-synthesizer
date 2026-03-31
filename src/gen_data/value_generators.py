@@ -324,11 +324,14 @@ def find_inheritable_field(col: dict, parent_columns: list[str]) -> str | None:
     if col["name"] in parent_columns:
         return col["name"]
 
-    # Semantic token match — extended to cover common financial field patterns
+    # Semantic token match — token must appear as a whole word (bounded by _ or string edges)
+    # to avoid false matches like "state" matching "address_state".
+    import re
     tokens = ["currency", "country", "segment", "risk", "type", "channel", "status", "grade"]
     for token in tokens:
-        if token in col_name:
+        pattern = r"(^|_)" + token + r"(_|$)"
+        if re.search(pattern, col_name):
             for pcol in parent_columns:
-                if token in pcol.lower():
+                if re.search(pattern, pcol.lower()):
                     return pcol
     return None

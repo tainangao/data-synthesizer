@@ -280,7 +280,13 @@ def _try_inherit_column(
                 parent_df[match].to_list(),
             )
         )
-        return [parent_lookup.get(fk_val) for fk_val in fk_values]
+        inherited = [parent_lookup.get(fk_val) for fk_val in fk_values]
+
+        # Don't inherit if result contains nulls and the child column is non-nullable
+        if not col.get("nullable", True) and any(v is None for v in inherited):
+            continue
+
+        return inherited
 
     return None
 
