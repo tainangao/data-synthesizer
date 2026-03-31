@@ -155,8 +155,8 @@ Reference artifacts:
 | Architecture Design (25%) | Modular design with clear separation of concerns; supports multiple schema/data output formats. |
 | Synthetic Data Quality (25%) | Uses weighted distributions, relationship rules, and FK checks; quality reports quantify results. |
 | Engineering Implementation (20%) | Clean Python modules, Pydantic validation, Faker integration, reusable utility/writer components. |
-| Handling Semi-Structured Data (15%) | Supports both JSON and XML fields in schema and generated data; XML generation logic is covered in tests. |
-| Scalability and Performance (15%) | Includes batching/stress-mode options and per-table throughput metrics for larger runs. |
+| Handling Semi-Structured Data (15%) | Supports both JSON and XML fields in schema and generated data.|
+| Scalability and Performance (15%) | Uses Polars for efficient columnar data generation and batch processing; includes per-table throughput metrics. |
 
 ## Quick run
 1. `uv sync`
