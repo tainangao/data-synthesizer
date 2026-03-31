@@ -9,7 +9,7 @@ from faker import Faker
 from gen_data.data_generator import _generate_entity_table, _generate_event_table
 
 
-def test_generate_entity_table_simple():
+def test_generate_entity_table():
     """Debug entity table generation with minimal parent-child relationship."""
     rng = random.Random(42)
     fake = Faker()
@@ -81,7 +81,7 @@ def test_generate_entity_table_simple():
     assert all(cid in state["pk_values"]["customers"] for cid in child_df["customer_id"].to_list())
 
 
-def test_generate_event_table_simple():
+def test_generate_event_table():
     """Debug event table generation with Poisson emission."""
     rng = random.Random(42)
     fake = Faker()
