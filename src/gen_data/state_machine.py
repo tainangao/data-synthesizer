@@ -2,6 +2,8 @@
 
 from typing import Any
 
+import polars as pl
+
 
 STRENGTH_MAP = {"weak": 0.2, "moderate": 0.5, "strong": 1.0}
 
@@ -124,3 +126,20 @@ def apply_state_machine(
     # Normalize and sample
     normalized = normalize_probs(adjusted)
     return sample_state(normalized, rng)
+
+
+def apply_state_machine_batch(
+    state_machine: dict,
+    df: pl.DataFrame,
+    rng: Any,
+    field_ranges: dict[str, tuple[float, float]] | None = None,
+) -> pl.Series:
+    """Apply state machine to all rows in a DataFrame.
+
+    Iterates rows internally (adjustments are per-row), but returns a
+    single Polars Series that can be assigned as a column.
+    """
+    states = []
+    for row in df.iter_rows(named=True):
+        states.append(apply_state_machine(state_machine, row, rng, field_ranges))
+    return pl.Series(state_machine["state_field"], states)

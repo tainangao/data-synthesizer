@@ -1,15 +1,23 @@
-"""Data generation orchestrator."""
+"""Data generation orchestrator using Polars for batch column generation."""
 
+import logging
 import random
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
+import numpy as np
+import polars as pl
 from faker import Faker
 
-from .event_emitter import calculate_lambda, sample_event_count, should_emit_events
-from .state_machine import apply_state_machine
-from .value_generators import generate_field_value
+from .event_emitter import (
+    calculate_lambdas_batch,
+    filter_eligible_parents,
+    sample_event_counts_batch,
+)
+from .state_machine import apply_state_machine_batch
+from .value_generators import find_inheritable_field, generate_column
+
+logger = logging.getLogger(__name__)
 
 
 def generate_data(
@@ -29,18 +37,10 @@ def generate_data(
     Returns:
         Dictionary of table_name: row_count
     """
-    # Initialize state
     seed = seed or config.get("seed", 42)
     rng = random.Random(seed)
     fake = Faker()
     fake.seed_instance(seed)
-
-    state = {
-        "pk_values": {},  # {table_name: [pk_values]}
-        "pk_profiles": {},  # {table_name: {pk: {field: value}}}
-        "rng": rng,
-        "fake": fake,
-    }
 
     tables_by_name = {t["name"]: t for t in schema["tables"]}
     generation_order = config["generation_order"]
@@ -50,63 +50,48 @@ def generate_data(
     events = config.get("events", {})
     simulation = config.get("simulation", {})
 
-    row_counts = {}
+    # State shared across tables for FK sampling and inheritance
+    state: dict[str, Any] = {
+        "pk_values": {},          # {table: [pk_values]}
+        "table_dfs": {},          # {table: pl.DataFrame}  — for joins / inheritance
+    }
 
-    # Generate entity tables
+    row_counts: dict[str, int] = {}
+
+    # ── Phase 1: Entity tables ──────────────────────────────────────────
     for table_name in generation_order:
-        if table_name not in tables_by_name:
+        if table_name not in tables_by_name or table_name in events:
             continue
 
         table = tables_by_name[table_name]
         count = table_counts.get(table_name, 100)
 
-        # Skip event tables (generated later)
-        if table_name in events:
-            continue
+        logger.info(f"Generating {count} rows for entity table: {table_name}")
+        df = _generate_entity_table(table, count, entities, state_machines, state, simulation, rng, fake)
 
-        # Start table in all writers
+        # Store PK pool and DataFrame for child tables
+        _store_table_state(table, df, state)
+
+        # Write to all formats
         for writer in writers:
-            writer.start_table(table)
+            writer.write_dataframe(table, df)
 
-        # Generate rows
-        for row_idx in range(count):
-            row = _generate_row(
-                table, row_idx, entities, state_machines, state, simulation
-            )
+        row_counts[table_name] = len(df)
 
-            # Write row
-            for writer in writers:
-                writer.write_row(row)
-
-            # Store PK and profile
-            _store_row_state(table, row, state)
-
-        # End table in all writers
-        for writer in writers:
-            writer.end_table()
-
-        row_counts[table_name] = count
-
-    # Generate event tables
+    # ── Phase 2: Event tables ───────────────────────────────────────────
     for event_table_name, event_config in events.items():
         if event_table_name not in tables_by_name:
             continue
 
         table = tables_by_name[event_table_name]
 
-        # Start table in all writers
+        logger.info(f"Generating events for table: {event_table_name}")
+        df = _generate_event_table(table, event_config, entities, state, simulation, rng, fake)
+
         for writer in writers:
-            writer.start_table(table)
+            writer.write_dataframe(table, df)
 
-        event_count = _emit_events(
-            table, event_config, state, entities, simulation, writers
-        )
-
-        # End table in all writers
-        for writer in writers:
-            writer.end_table()
-
-        row_counts[event_table_name] = event_count
+        row_counts[event_table_name] = len(df)
 
     # Close all writers
     for writer in writers:
@@ -115,88 +100,159 @@ def generate_data(
     return row_counts
 
 
-def _generate_row(
+# ── Entity table generation ─────────────────────────────────────────────
+
+
+def _generate_entity_table(
     table: dict,
-    row_idx: int,
+    count: int,
     entities: dict,
     state_machines: dict,
     state: dict,
     simulation: dict,
-) -> dict[str, Any]:
-    """Generate a single row for a table."""
-    row = {}
-    rng = state["rng"]
-    fake = state["fake"]
+    rng: random.Random,
+    fake: Faker,
+) -> pl.DataFrame:
+    """Generate a full entity table as a Polars DataFrame."""
     table_name = table["name"]
-    entity_config = entities.get(table_name, {})
-    field_configs = entity_config.get("fields", {})
+    field_configs = entities.get(table_name, {}).get("fields", {})
+    sim_start = simulation.get("start_date")
+    sim_end = simulation.get("end_date")
 
-    # Get parent profile if FK exists
-    parent_profile = None
-    temporal_anchor = None
+    columns: dict[str, list] = {}
+    temporal_anchor: list[datetime] | None = None
 
-    # First pass: Generate PK and FK
+    # ── Pass 1: PK and FK columns ───────────────────────────────────
     for col in table["columns"]:
         col_name = col["name"]
 
         if col.get("primary_key"):
-            row[col_name] = generate_field_value(
-                col, None, rng, fake, row_idx
-            )
+            columns[col_name] = generate_column(col, None, count, rng, fake)
+
         elif col.get("foreign_key"):
             fk = col["foreign_key"]
             parent_table = fk["table"]
-            if parent_table in state["pk_values"]:
-                parent_pks = state["pk_values"][parent_table]
-                if parent_pks:
-                    parent_pk = rng.choice(parent_pks)
-                    row[col_name] = parent_pk
-                    # Get parent profile
-                    if parent_table in state["pk_profiles"]:
-                        parent_profile = state["pk_profiles"][parent_table].get(parent_pk, {})
+            parent_pks = state["pk_values"].get(parent_table, [])
+            if parent_pks:
+                columns[col_name] = rng.choices(parent_pks, k=count)
+            else:
+                columns[col_name] = [None] * count
 
-    # Second pass: Generate other fields
+    # ── Pass 2: Remaining columns ───────────────────────────────────
     for col in table["columns"]:
         col_name = col["name"]
-
-        if col_name in row:
+        if col_name in columns:
             continue
 
+        role = col.get("field_role", "text")
+
+        # Try inheritance from parent via FK join
+        if role != "identifier":
+            inherited = _try_inherit_column(col, table, columns, state)
+            if inherited is not None:
+                columns[col_name] = inherited
+                continue
+
+        # Generate column
         config_dist = field_configs.get(col_name)
-        sim_start = simulation.get("start_date")
-        sim_end = simulation.get("end_date")
-
-        value = generate_field_value(
-            col, config_dist, rng, fake, row_idx,
-            parent_profile, sim_start, sim_end, temporal_anchor
+        values = generate_column(
+            col, config_dist, count, rng, fake, sim_start, sim_end, temporal_anchor
         )
+        columns[col_name] = values
 
-        row[col_name] = value
+        # Track first temporal column as anchor for relative dates
+        if temporal_anchor is None and role == "temporal":
+            temporal_anchor = values
 
-        # Use first temporal field as anchor
-        if temporal_anchor is None and col.get("field_role") == "temporal":
-            if isinstance(value, datetime):
-                temporal_anchor = value
+    # ── Assemble DataFrame ──────────────────────────────────────────
+    # Build in schema column order
+    col_order = [c["name"] for c in table["columns"]]
+    df = pl.DataFrame({name: columns[name] for name in col_order if name in columns})
 
-    # Apply state machine if configured
+    # ── Apply state machine (overwrites status column) ──────────────
     if table_name in state_machines:
         sm = state_machines[table_name]
-        state_field = sm["state_field"]
-        if state_field in row:
-            row[state_field] = apply_state_machine(sm, row, rng)
+        state_col = apply_state_machine_batch(sm, df, rng)
+        df = df.with_columns(state_col)
 
-    # Apply nullability
+    # ── Apply nullability mask ──────────────────────────────────────
+    df = _apply_nulls(df, table, rng, count)
+
+    return df
+
+
+def _try_inherit_column(
+    col: dict,
+    table: dict,
+    columns: dict[str, list],
+    state: dict,
+) -> list | None:
+    """Try to inherit a column's values from the parent table via FK join."""
+    # Find the FK column in this table that links to a parent
+    for fk_col in table["columns"]:
+        fk = fk_col.get("foreign_key")
+        if not fk:
+            continue
+
+        parent_table = fk["table"]
+        parent_df = state["table_dfs"].get(parent_table)
+        if parent_df is None:
+            continue
+
+        # Check if parent has a matching column
+        match = find_inheritable_field(col, parent_df.columns)
+        if match is None:
+            continue
+
+        # Join: use FK column values to look up parent values
+        fk_col_name = fk_col["name"]
+        if fk_col_name not in columns:
+            continue
+
+        parent_pk_col = fk["column"]
+        fk_values = columns[fk_col_name]
+
+        # Build a lookup from parent PK → parent value
+        parent_lookup = dict(
+            zip(
+                parent_df[parent_pk_col].to_list(),
+                parent_df[match].to_list(),
+            )
+        )
+        return [parent_lookup.get(fk_val) for fk_val in fk_values]
+
+    return None
+
+
+def _apply_nulls(
+    df: pl.DataFrame, table: dict, rng: random.Random, count: int
+) -> pl.DataFrame:
+    """Apply 5% null rate to nullable, non-PK columns."""
+    null_exprs = []
     for col in table["columns"]:
         col_name = col["name"]
-        if col.get("nullable", True) and not col.get("primary_key"):
-            if rng.random() < 0.05:  # 5% null rate
-                row[col_name] = None
+        if col_name not in df.columns:
+            continue
+        if not col.get("nullable", True) or col.get("primary_key") or col.get("foreign_key"):
+            continue
 
-    return row
+        # Generate mask: True = keep, False = null
+        mask = [rng.random() >= 0.05 for _ in range(count)]
+        null_exprs.append(
+            pl.when(pl.Series(mask)).then(pl.col(col_name)).otherwise(None).alias(col_name)
+        )
+
+    if null_exprs:
+        df = df.with_columns(null_exprs)
+
+    return df
 
 
-def _store_row_state(table: dict, row: dict, state: dict) -> None:
-    """Store PK and profile for FK sampling and inheritance."""
+# ── State management ────────────────────────────────────────────────────
+
+
+def _store_table_state(table: dict, df: pl.DataFrame, state: dict) -> None:
+    """Store PK pool and DataFrame for child tables."""
     table_name = table["name"]
 
     # Find PK column
@@ -206,144 +262,130 @@ def _store_row_state(table: dict, row: dict, state: dict) -> None:
             pk_col = col["name"]
             break
 
-    if not pk_col or pk_col not in row:
-        return
+    if pk_col and pk_col in df.columns:
+        state["pk_values"][table_name] = df[pk_col].to_list()
 
-    pk_value = row[pk_col]
-
-    # Store PK value
-    if table_name not in state["pk_values"]:
-        state["pk_values"][table_name] = []
-    state["pk_values"][table_name].append(pk_value)
-
-    # Store compact profile (key fields for inheritance)
-    if table_name not in state["pk_profiles"]:
-        state["pk_profiles"][table_name] = {}
-
-    profile = {}
-    for col in table["columns"]:
-        col_name = col["name"]
-        field_role = col.get("field_role")
-        # Store categorical, numerical, and temporal fields
-        if field_role in ["categorical", "numerical", "temporal"] and col_name in row:
-            profile[col_name] = row[col_name]
-
-    state["pk_profiles"][table_name][pk_value] = profile
+    # Store full DataFrame for inheritance joins and event emission
+    state["table_dfs"][table_name] = df
 
 
-def _emit_events(
+# ── Event table generation ──────────────────────────────────────────────
+
+
+def _generate_event_table(
     table: dict,
     event_config: dict,
-    state: dict,
     entities: dict,
+    state: dict,
     simulation: dict,
-    writers: list,
-) -> int:
-    """Emit events for a parent entity table."""
+    rng: random.Random,
+    fake: Faker,
+) -> pl.DataFrame:
+    """Generate event rows based on parent entity states and Poisson distribution."""
     parent_table = event_config["emitted_by"]
     emit_when_states = event_config.get("emit_when_states", [])
     frequency = event_config.get("frequency", {})
     lambda_base = frequency.get("lambda_base", 1.0)
     lambda_modifiers = frequency.get("lambda_modifiers", [])
 
-    rng = state["rng"]
-    fake = state["fake"]
-    table_name = table["name"]
-    entity_config = entities.get(table_name, {})
-    field_configs = entity_config.get("fields", {})
+    parent_df = state["table_dfs"].get(parent_table, pl.DataFrame())
+    if parent_df.is_empty():
+        return pl.DataFrame()
 
-    # Get parent state field if state machine exists
-    parent_state_field = None
-    if parent_table in state.get("pk_profiles", {}):
-        for pk, profile in state["pk_profiles"][parent_table].items():
-            for key in profile.keys():
-                if "status" in key.lower() or "state" in key.lower():
-                    parent_state_field = key
-                    break
-            break
+    # Find parent PK and state field
+    parent_pk_col = None
+    for t in [t for t in [state] if True]:  # just need pk from pk_values
+        pass
+    # Look up parent PK column from the event table's FK
+    parent_pk_col = _find_parent_pk_col(table, parent_table)
 
-    event_count = 0
-    parent_pks = state["pk_values"].get(parent_table, [])
+    # Find parent state field
+    parent_state_field = _find_state_field(parent_df)
 
-    for parent_pk in parent_pks:
-        parent_profile = state["pk_profiles"].get(parent_table, {}).get(parent_pk, {})
+    # Filter to eligible parents
+    eligible = filter_eligible_parents(parent_df, parent_state_field, emit_when_states)
+    if eligible.is_empty():
+        return pl.DataFrame()
 
-        # Check if parent state allows emission
-        if parent_state_field and parent_state_field in parent_profile:
-            parent_state = parent_profile[parent_state_field]
-            if not should_emit_events(parent_state, emit_when_states):
-                continue
+    # Vectorized lambda + Poisson
+    lambdas = calculate_lambdas_batch(lambda_base, lambda_modifiers, eligible)
+    event_counts = sample_event_counts_batch(lambdas, rng.randint(0, 2**31))
 
-        # Calculate lambda
-        lambda_val = calculate_lambda(lambda_base, lambda_modifiers, parent_profile)
+    # Build event rows
+    total_events = int(event_counts.sum())
+    if total_events == 0:
+        return pl.DataFrame()
 
-        # Sample event count
-        num_events = sample_event_count(lambda_val, rng)
+    logger.info(f"  Emitting {total_events} events from {len(eligible)} eligible parents")
 
-        # Generate events
-        for i in range(num_events):
-            row = _generate_event_row(
-                table, i, parent_table, parent_pk, parent_profile,
-                field_configs, simulation, state
-            )
-
-            for writer in writers:
-                writer.write_row(row)
-
-            event_count += 1
-
-    return event_count
+    return _build_event_dataframe(
+        table, eligible, parent_pk_col, parent_table,
+        event_counts, total_events, entities, simulation, rng, fake
+    )
 
 
-def _generate_event_row(
+def _find_parent_pk_col(table: dict, parent_table: str) -> str | None:
+    """Find the parent PK column referenced by this event table's FK."""
+    for col in table["columns"]:
+        fk = col.get("foreign_key")
+        if fk and fk["table"] == parent_table:
+            return fk["column"]
+    return None
+
+
+def _find_state_field(df: pl.DataFrame) -> str | None:
+    """Find a status/state field in a DataFrame."""
+    for col_name in df.columns:
+        lower = col_name.lower()
+        if "status" in lower or "state" in lower:
+            if "employment" not in lower and "marital" not in lower:
+                return col_name
+    return None
+
+
+def _build_event_dataframe(
     table: dict,
-    row_idx: int,
+    eligible: pl.DataFrame,
+    parent_pk_col: str | None,
     parent_table: str,
-    parent_pk: Any,
-    parent_profile: dict,
-    field_configs: dict,
+    event_counts: np.ndarray,
+    total_events: int,
+    entities: dict,
     simulation: dict,
-    state: dict,
-) -> dict[str, Any]:
-    """Generate a single event row."""
-    row = {}
-    rng = state["rng"]
-    fake = state["fake"]
-    temporal_anchor = None
+    rng: random.Random,
+    fake: Faker,
+) -> pl.DataFrame:
+    """Build the event DataFrame by repeating parent PKs and generating fields."""
+    table_name = table["name"]
+    field_configs = entities.get(table_name, {}).get("fields", {})
+    sim_start = simulation.get("start_date")
+    sim_end = simulation.get("end_date")
 
-    # First pass: PK and FK
+    # Repeat parent PKs according to event counts
+    parent_pks = eligible[parent_pk_col].to_list() if parent_pk_col else []
+    repeated_pks = []
+    for pk, cnt in zip(parent_pks, event_counts):
+        repeated_pks.extend([pk] * int(cnt))
+
+    columns: dict[str, list] = {}
+
+    # Generate columns
     for col in table["columns"]:
         col_name = col["name"]
 
         if col.get("primary_key"):
-            row[col_name] = generate_field_value(col, None, rng, fake, row_idx)
+            columns[col_name] = generate_column(col, None, total_events, rng, fake)
         elif col.get("foreign_key"):
             fk = col["foreign_key"]
             if fk["table"] == parent_table:
-                row[col_name] = parent_pk
+                columns[col_name] = repeated_pks
+            else:
+                columns[col_name] = [None] * total_events
+        else:
+            config_dist = field_configs.get(col_name)
+            columns[col_name] = generate_column(
+                col, config_dist, total_events, rng, fake, sim_start, sim_end
+            )
 
-    # Second pass: other fields
-    for col in table["columns"]:
-        col_name = col["name"]
-
-        if col_name in row:
-            continue
-
-        config_dist = field_configs.get(col_name)
-        sim_start = simulation.get("start_date")
-        sim_end = simulation.get("end_date")
-
-        value = generate_field_value(
-            col, config_dist, rng, fake, row_idx,
-            parent_profile, sim_start, sim_end, temporal_anchor
-        )
-
-        row[col_name] = value
-
-        if temporal_anchor is None and col.get("field_role") == "temporal":
-            if isinstance(value, datetime):
-                temporal_anchor = value
-
-    return row
-
-
+    col_order = [c["name"] for c in table["columns"]]
+    return pl.DataFrame({name: columns[name] for name in col_order if name in columns})

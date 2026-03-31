@@ -5,6 +5,8 @@ import shutil
 import sqlite3
 from typing import Any
 
+import polars as pl
+
 from src.utils.common import parse_datetime, safe_name
 
 
@@ -114,6 +116,12 @@ class CSVWriter:
         self._file = None
         self._writer = None
 
+    def write_dataframe(self, table: dict, df: pl.DataFrame) -> None:
+        """Write a full Polars DataFrame as CSV."""
+        table_name = table["name"]
+        path = self.out_dir / f"{safe_name(table_name)}.csv"
+        df.write_csv(path)
+
     def close(self) -> None:
         self.end_table()
 
@@ -209,6 +217,21 @@ class SQLiteWriter:
         self._insert_columns = []
         self._batch.clear()
 
+    def write_dataframe(self, table: dict, df: pl.DataFrame) -> None:
+        """Write a full Polars DataFrame into SQLite."""
+        table_name = table["name"]
+        columns = [c["name"] for c in table["columns"]]
+        col_sql = ", ".join(f'"{c}"' for c in columns)
+        placeholders = ", ".join("?" for _ in columns)
+        insert_sql = f'INSERT INTO "{table_name}" ({col_sql}) VALUES ({placeholders})'
+
+        # Convert to list-of-tuples, serialize complex types, batch insert
+        rows = df.select(columns).rows()
+        serialized = [tuple(serialize_cell(v) for v in row) for row in rows]
+        for i in range(0, len(serialized), self._batch_size):
+            self.conn.executemany(insert_sql, serialized[i : i + self._batch_size])
+        self.conn.commit()
+
     def close(self) -> None:
         self._flush_batch()
         self.conn.commit()
@@ -288,6 +311,15 @@ class ParquetWriter:
         self._table = None
         self._rows = []
         self._output_path = None
+
+    def write_dataframe(self, table: dict, df: pl.DataFrame) -> None:
+        """Write a full Polars DataFrame as Parquet."""
+        table_name = table["name"]
+        path = self.out_dir / f"{safe_name(table_name)}.parquet"
+        if path.exists():
+            path.unlink()
+        df.write_parquet(path)
+        self.table_paths[table_name] = path
 
     def close(self) -> None:
         self.end_table()
@@ -372,6 +404,19 @@ class DeltaWriter:
         self._rows = []
         self._table_path = None
         self._has_written = False
+
+    def write_dataframe(self, table: dict, df: pl.DataFrame) -> None:
+        """Write a full Polars DataFrame as Delta table."""
+        table_name = table["name"]
+        table_path = self.out_dir / safe_name(table_name)
+        if table_path.exists():
+            if table_path.is_dir():
+                shutil.rmtree(table_path)
+            else:
+                table_path.unlink()
+        arrow_table = df.to_arrow()
+        self._write_deltalake(str(table_path), arrow_table, mode="overwrite")
+        self.table_paths[table_name] = table_path
 
     def close(self) -> None:
         self.end_table()

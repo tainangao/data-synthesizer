@@ -1,78 +1,68 @@
 """Event emission with Poisson distribution and lambda modifiers."""
 
+import random
 from typing import Any
 
+import numpy as np
+import polars as pl
 
-def calculate_lambda(
+
+STRENGTH_FACTOR = 0.5  # Default modifier strength
+
+
+def calculate_lambdas_batch(
     lambda_base: float,
     lambda_modifiers: list[dict],
-    parent_row: dict[str, Any],
-    field_ranges: dict[str, tuple[float, float]] | None = None,
-) -> float:
-    """Calculate adjusted lambda for Poisson distribution.
+    parent_df: pl.DataFrame,
+) -> np.ndarray:
+    """Vectorized lambda calculation for all parent rows.
 
-    Args:
-        lambda_base: Base lambda value
-        lambda_modifiers: List of {field, effect} modifiers
-        parent_row: Parent entity row values
-        field_ranges: Optional field ranges for normalization
-
-    Returns:
-        Adjusted lambda value
+    Returns an ndarray of adjusted lambda values, one per parent row.
     """
-    lambda_val = lambda_base
+    n = len(parent_df)
+    lambdas = np.full(n, lambda_base, dtype=np.float64)
 
     for modifier in lambda_modifiers:
         field = modifier["field"]
-        if field not in parent_row:
+        if field not in parent_df.columns:
             continue
 
-        value = parent_row[field]
-        if not isinstance(value, (int, float)):
+        col = parent_df[field]
+        if col.dtype not in (pl.Float64, pl.Float32, pl.Int64, pl.Int32, pl.Int16, pl.Int8):
             continue
 
-        # Normalize value
-        if field_ranges and field in field_ranges:
-            min_val, max_val = field_ranges[field]
-            if max_val == min_val:
-                normalized = 0.5
-            else:
-                normalized = max(0.0, min(1.0, (float(value) - min_val) / (max_val - min_val)))
+        values = col.to_numpy().astype(np.float64)
+
+        # Normalize to 0-1
+        vmin, vmax = np.nanmin(values), np.nanmax(values)
+        if vmax > vmin:
+            normalized = (values - vmin) / (vmax - vmin)
         else:
-            normalized = 0.5
+            normalized = np.full(n, 0.5)
 
-        # Apply modifier
         effect = modifier.get("effect", "higher_increases")
         if effect == "higher_increases":
-            lambda_val *= (1 + 0.5 * normalized)
+            lambdas *= (1 + STRENGTH_FACTOR * normalized)
         elif effect == "higher_decreases":
-            lambda_val *= (1 - 0.5 * normalized)
+            lambdas *= (1 - STRENGTH_FACTOR * normalized)
 
-    return max(0.1, lambda_val)
+    return np.clip(lambdas, 0.1, None)
 
 
-def should_emit_events(
-    parent_state: Any,
+def sample_event_counts_batch(
+    lambdas: np.ndarray, rng_seed: int
+) -> np.ndarray:
+    """Batch Poisson sampling for all parents at once."""
+    gen = np.random.default_rng(rng_seed)
+    return gen.poisson(lambdas)
+
+
+def filter_eligible_parents(
+    parent_df: pl.DataFrame,
+    state_field: str | None,
     emit_when_states: list[str],
-) -> bool:
-    """Check if parent state allows event emission."""
-    if not emit_when_states:
-        return True
-    return str(parent_state) in emit_when_states
-
-
-def sample_event_count(lambda_val: float, rng: Any) -> int:
-    """Sample event count from Poisson distribution."""
-    # Use numpy if available, otherwise approximate
-    try:
-        import numpy as np
-        return int(np.random.poisson(lambda_val))
-    except ImportError:
-        # Simple approximation using exponential distribution
-        count = 0
-        p = 1.0
-        L = 2.71828 ** (-lambda_val)
-        while p > L:
-            count += 1
-            p *= rng.random()
-        return count - 1
+) -> pl.DataFrame:
+    """Filter parents to only those in eligible states."""
+    if not emit_when_states or not state_field or state_field not in parent_df.columns:
+        return parent_df
+    return parent_df.filter(pl.col(state_field).is_in(emit_when_states))
