@@ -42,14 +42,14 @@ def generate_data(
     fake = Faker()
     fake.seed_instance(seed)
 
-    tables_by_name = {t["name"]: t for t in schema["tables"]}
-    generation_order = config["generation_order"]
-    table_counts = config["table_counts"]
-    entities = config.get("entities", {})
-    state_machines = config.get("state_machines", {})
-    events = config.get("events", {})
-    simulation = config.get("simulation", {})
-    constraints = config.get("constraints", [])
+    tables_by_name: dict = {t["name"]: t for t in schema["tables"]}
+    generation_order: list[str] = config["generation_order"]
+    table_counts: dict[str, int] = config["table_counts"]
+    entities: dict = config.get("entities", {})
+    state_machines: dict = config.get("state_machines", {})
+    events: dict = config.get("events", {})
+    simulation: dict = config.get("simulation", {})
+    constraints: list[dict] = config.get("constraints", [])
 
     # State shared across tables for FK sampling and inheritance
     state: dict[str, Any] = {
