@@ -10,7 +10,7 @@ from src.utils.reporting import build_quality_report
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-OP_DIR = Path(__file__).parent / "demo_output"
+OP_DIR = Path(__file__).parent / "output"
 OP_DIR.mkdir(parents=True, exist_ok=True)
 
 RECORD_COUNT = 74

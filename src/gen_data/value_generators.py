@@ -40,8 +40,8 @@ def generate_numerical_column(
             mean, std = params.get("mean", 0), params.get("std", 1)
             return [rng.gauss(mean, std) for _ in range(count)]
         elif dist_type == "lognormal":
-            mean, sigma = params.get("mean", 1), params.get("sigma", 0.5)
-            return [rng.lognormvariate(mean, sigma) for _ in range(count)]
+            mu, sigma = params.get("mu", 2), params.get("sigma", 0.5)
+            return [rng.lognormvariate(mu, sigma) for _ in range(count)]
         elif dist_type == "uniform":
             low, high = params.get("low", 0), params.get("high", 100)
             return [rng.uniform(low, high) for _ in range(count)]
@@ -54,7 +54,7 @@ def generate_numerical_column(
     elif "rate" in col_name or "yield" in col_name or "interest" in col_name:
         return [rng.gauss(5.5, 3.0) for _ in range(count)]  # Percentage rates
     elif "amount" in col_name or "balance" in col_name or "principal" in col_name:
-        return [rng.lognormvariate(10, 0.8) for _ in range(count)]  # Right-skewed monetary values
+        return [rng.lognormvariate(8, 1.2) for _ in range(count)]  # Right-skewed monetary values
     elif "age" in col_name:
         return [int(rng.gauss(35, 12)) for _ in range(count)]  # Adult age distribution
     elif "quantity" in col_name or "count" in col_name:
