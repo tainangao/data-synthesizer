@@ -232,6 +232,21 @@ class SQLiteWriter:
             self.conn.executemany(insert_sql, serialized[i : i + self._batch_size])
         self.conn.commit()
 
+    def update_dataframe(self, table: dict, df: pl.DataFrame) -> None:
+        """Update existing records in SQLite using primary key."""
+        table_name = table["name"]
+        pk_col = next(c["name"] for c in table["columns"] if c.get("primary_key"))
+        columns = [c["name"] for c in table["columns"] if c["name"] != pk_col]
+
+        set_clause = ", ".join(f'"{c}" = ?' for c in columns)
+        update_sql = f'UPDATE "{table_name}" SET {set_clause} WHERE "{pk_col}" = ?'
+
+        rows = df.select(columns + [pk_col]).rows()
+        serialized = [tuple(serialize_cell(v) for v in row) for row in rows]
+        for i in range(0, len(serialized), self._batch_size):
+            self.conn.executemany(update_sql, serialized[i : i + self._batch_size])
+        self.conn.commit()
+
     def close(self) -> None:
         self._flush_batch()
         self.conn.commit()
