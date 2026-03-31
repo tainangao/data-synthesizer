@@ -46,18 +46,19 @@ def generate_numerical_column(
             low, high = params.get("low", 0), params.get("high", 100)
             return [rng.uniform(low, high) for _ in range(count)]
 
-    # Semantic defaults
+    # Semantic defaults: column name patterns drive distribution choice
+    # This allows schema-driven generation without explicit config for every field
     col_name = col["name"].lower()
     if "score" in col_name or "rating" in col_name:
-        return [rng.gauss(650, 100) for _ in range(count)]
+        return [rng.gauss(650, 100) for _ in range(count)]  # Credit score range
     elif "rate" in col_name or "yield" in col_name or "interest" in col_name:
-        return [rng.gauss(5.5, 3.0) for _ in range(count)]
+        return [rng.gauss(5.5, 3.0) for _ in range(count)]  # Percentage rates
     elif "amount" in col_name or "balance" in col_name or "principal" in col_name:
-        return [rng.lognormvariate(8, 1.2) for _ in range(count)]
+        return [rng.lognormvariate(8, 1.2) for _ in range(count)]  # Right-skewed monetary values
     elif "age" in col_name:
-        return [int(rng.gauss(35, 12)) for _ in range(count)]
+        return [int(rng.gauss(35, 12)) for _ in range(count)]  # Adult age distribution
     elif "quantity" in col_name or "count" in col_name:
-        return [int(rng.lognormvariate(2, 0.5)) for _ in range(count)]
+        return [int(rng.lognormvariate(2, 0.5)) for _ in range(count)]  # Small positive integers
 
     return [rng.gauss(50, 20) for _ in range(count)]
 
@@ -127,13 +128,15 @@ def generate_temporal_column(
     anchor_series: list[datetime] | None = None,
     parent_temporal: list | None = None,
 ) -> list[datetime]:
-    """Batch-generate temporal values.
+    """Batch-generate temporal values with two types of constraints.
 
     Args:
         anchor_series: Per-row anchor from an earlier column in the same table
-            (e.g. start_date → used to generate end_date).
+            (e.g. start_date → used to generate end_date as start_date + offset).
+            This creates within-row temporal relationships.
         parent_temporal: Per-row floor from the parent table's date column
-            (e.g. account_open_date → used so transaction_date ≥ account_open_date).
+            (e.g. account_open_date → ensures transaction_date ≥ account_open_date).
+            This enforces parent-child temporal ordering.
     """
     col_name = col["name"].lower()
 
@@ -145,7 +148,7 @@ def generate_temporal_column(
         now = datetime.now()
         return [now - timedelta(days=int(rng.gauss(35, 12)) * 365) for _ in range(count)]
 
-    # Relative dates anchored within the same row
+    # Relative dates anchored within the same row (e.g., end_date = start_date + offset)
     if anchor_series is not None:
         if "end" in col_name or "close" in col_name or "maturity" in col_name:
             return [a + timedelta(days=rng.randint(30, 365)) for a in anchor_series]
@@ -153,6 +156,7 @@ def generate_temporal_column(
             return [a + timedelta(days=rng.randint(1, 90)) for a in anchor_series]
 
     # Use parent temporal as a per-row floor so child dates ≥ parent dates
+    # Example: transaction_date must be >= account_open_date
     delta_days = (end_dt - start_dt).days
     results = []
     for i in range(count):
@@ -304,6 +308,13 @@ def generate_column(
 
 def find_inheritable_field(col: dict, parent_columns: list[str]) -> str | None:
     """Find a parent column that semantically matches this child column.
+
+    Uses two strategies:
+    1. Exact name match (e.g., child "currency" → parent "currency")
+    2. Semantic token match (e.g., child "account_currency" → parent "currency")
+
+    This enables value inheritance where child records copy parent values via FK joins,
+    maintaining consistency (e.g., all transactions inherit account's currency).
 
     Returns the parent column name, or None.
     """

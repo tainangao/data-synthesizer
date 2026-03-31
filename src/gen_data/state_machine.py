@@ -25,6 +25,14 @@ def apply_adjustments(
 ) -> dict[str, float]:
     """Apply feature-based adjustments to base probabilities.
 
+    Modulates state transition probabilities based on row feature values.
+    Example: Higher risk_score increases probability of "Declined" state.
+
+    Process:
+    1. Normalize feature values to 0-1 range
+    2. Apply directional adjustments (higher_increases or higher_decreases)
+    3. Scale by strength factor (weak=0.2, moderate=0.5, strong=1.0)
+
     Args:
         base_probs: {to_state: base_prob}
         row_values: Current row field values
