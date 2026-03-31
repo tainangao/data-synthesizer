@@ -584,7 +584,7 @@ def _update_parent_balance(
     if not amount_col:
         return
 
-    # Find parent FK column
+    # Find parent FK and PK columns
     parent_fk_col = None
     for col in event_table["columns"]:
         fk = col.get("foreign_key")
@@ -594,7 +594,6 @@ def _update_parent_balance(
     if not parent_fk_col or parent_fk_col not in event_df.columns:
         return
 
-    # Calculate balance adjustments
     parent_pk_col = None
     for col in tables_by_name[parent_table_name]["columns"]:
         if col.get("primary_key"):
@@ -603,16 +602,21 @@ def _update_parent_balance(
     if not parent_pk_col:
         return
 
-    # Sum amounts by parent
+    # Determine transaction type (credit/debit)
+    event_table_lower = event_table["name"].lower()
+    is_payment = "payment" in event_table_lower or "repayment" in event_table_lower
+
+    # Sum amounts by parent (payments reduce balance, transactions/deposits increase)
     balance_changes = event_df.group_by(parent_fk_col).agg(
         pl.col(amount_col).sum().alias("total_amount")
     )
 
-    # Update parent balance
+    # Update parent balance (subtract for payments, add for deposits)
+    sign = -1 if is_payment else 1
     updated_parent = parent_df.join(
         balance_changes, left_on=parent_pk_col, right_on=parent_fk_col, how="left"
     ).with_columns(
-        (pl.col(balance_col) + pl.col("total_amount").fill_null(0)).alias(balance_col)
+        (pl.col(balance_col) + sign * pl.col("total_amount").fill_null(0)).alias(balance_col)
     ).drop("total_amount")
 
     state["table_dfs"][parent_table_name] = updated_parent
