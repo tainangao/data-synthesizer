@@ -17,6 +17,15 @@ def calculate_lambdas_batch(
 ) -> np.ndarray:
     """Vectorized lambda calculation for all parent rows.
 
+    Adjusts Poisson lambda based on parent row features.
+    Example: Higher account_balance increases transaction frequency.
+
+    Process:
+    1. Start with base lambda for all rows
+    2. For each modifier, normalize feature values to 0-1
+    3. Apply effect: higher_increases multiplies lambda by (1 + 0.5 * normalized)
+    4. Clip to minimum 0.1 to avoid zero events
+
     Returns an ndarray of adjusted lambda values, one per parent row.
     """
     n = len(parent_df)

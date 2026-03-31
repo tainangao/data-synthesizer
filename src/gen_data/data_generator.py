@@ -201,7 +201,14 @@ def _get_parent_temporal_anchor(
     columns: dict[str, list],
     state: dict,
 ) -> list[datetime] | None:
-    """Return the parent table's first temporal column as a per-row floor for child dates."""
+    """Return the parent table's first temporal column as a per-row floor for child dates.
+
+    This ensures child temporal fields occur after parent temporal fields.
+    Example: transaction_date >= account_open_date
+
+    Returns a list of datetime values (one per child row) by looking up the parent's
+    temporal column via the FK relationship.
+    """
     for col in table["columns"]:
         fk = col.get("foreign_key")
         if not fk:
@@ -232,7 +239,20 @@ def _try_inherit_column(
     columns: dict[str, list],
     state: dict,
 ) -> list | None:
-    """Try to inherit a column's values from the parent table via FK join."""
+    """Try to inherit a column's values from the parent table via FK join.
+
+    Value inheritance reduces redundancy and maintains consistency across related tables.
+    Example: Transaction.currency inherits from Account.currency via account_id FK.
+
+    Process:
+    1. Find an FK column in this table
+    2. Get the parent DataFrame from state
+    3. Use semantic matching to find a compatible parent column
+    4. Build a lookup dict: {parent_pk: parent_value}
+    5. Map child FK values to parent values
+
+    Returns the inherited values list, or None if inheritance isn't possible.
+    """
     for fk_col in table["columns"]:
         fk = fk_col.get("foreign_key")
         if not fk:
@@ -272,6 +292,9 @@ def _apply_temporal_constraints(
 
     For each temporal_order constraint that references columns present in this table,
     ensure col[0] <= col[1] <= col[2] ... row-by-row by sorting the values.
+
+    Example: If constraint specifies [application_date, approval_date, disbursement_date],
+    this ensures approval doesn't happen before application, etc.
     """
     table_col_names = {c["name"] for c in table["columns"]}
 
@@ -487,8 +510,11 @@ def _propagate_fk_from_parent(
 ) -> list:
     """For a non-parent FK, look up the value from the parent row.
 
-    E.g. Transaction.customer_id can be found as Account.customer_id
-    by looking into each repeated parent Account row.
+    Handles grandparent FK propagation in event tables.
+    Example: Transaction.customer_id is found by looking up Account.customer_id
+    for each repeated Account row.
+
+    This maintains FK relationships across 3+ levels: Customer → Account → Transaction
     """
     fk_col_in_parent = fk["column"]  # The column name we need in the parent row
     result = []
