@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 OP_DIR = Path(__file__).parent / "output"
 OP_DIR.mkdir(parents=True, exist_ok=True)
 
-RECORD_COUNT = 74
+RECORD_COUNT = 10
 SEED = 42
 
 # Performance tuning options
