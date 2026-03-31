@@ -92,6 +92,9 @@ def generate_data(
             table, event_config, entities, constraints, state, simulation, rng, fake
         )
 
+        # Update parent balance if applicable
+        _update_parent_balance(table, df, event_config, state, tables_by_name, writers)
+
         for writer in writers:
             writer.write_dataframe(table, df)
 
@@ -544,3 +547,77 @@ def _find_temporal_col(df: pl.DataFrame) -> str | None:
         if df[col_name].dtype in (pl.Date, pl.Datetime):
             return col_name
     return None
+
+
+def _update_parent_balance(
+    event_table: dict,
+    event_df: pl.DataFrame,
+    event_config: dict,
+    state: dict,
+    tables_by_name: dict,
+    writers: list,
+) -> None:
+    """Update parent balance based on event amounts (credits - debits)."""
+    if event_df.is_empty():
+        return
+
+    parent_table_name = event_config["emitted_by"]
+    parent_df = state["table_dfs"].get(parent_table_name)
+    if parent_df is None:
+        return
+
+    # Find balance column in parent
+    balance_col = None
+    for col in parent_df.columns:
+        if "balance" in col.lower():
+            balance_col = col
+            break
+    if not balance_col:
+        return
+
+    # Find amount column in events
+    amount_col = None
+    for col in event_df.columns:
+        if "amount" in col.lower():
+            amount_col = col
+            break
+    if not amount_col:
+        return
+
+    # Find parent FK column
+    parent_fk_col = None
+    for col in event_table["columns"]:
+        fk = col.get("foreign_key")
+        if fk and fk["table"] == parent_table_name:
+            parent_fk_col = col["name"]
+            break
+    if not parent_fk_col or parent_fk_col not in event_df.columns:
+        return
+
+    # Calculate balance adjustments
+    parent_pk_col = None
+    for col in tables_by_name[parent_table_name]["columns"]:
+        if col.get("primary_key"):
+            parent_pk_col = col["name"]
+            break
+    if not parent_pk_col:
+        return
+
+    # Sum amounts by parent
+    balance_changes = event_df.group_by(parent_fk_col).agg(
+        pl.col(amount_col).sum().alias("total_amount")
+    )
+
+    # Update parent balance
+    updated_parent = parent_df.join(
+        balance_changes, left_on=parent_pk_col, right_on=parent_fk_col, how="left"
+    ).with_columns(
+        (pl.col(balance_col) + pl.col("total_amount").fill_null(0)).alias(balance_col)
+    ).drop("total_amount")
+
+    state["table_dfs"][parent_table_name] = updated_parent
+
+    # Rewrite parent table with updated balances
+    parent_table_def = tables_by_name[parent_table_name]
+    for writer in writers:
+        writer.write_dataframe(parent_table_def, updated_parent)
