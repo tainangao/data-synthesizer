@@ -15,15 +15,14 @@
 
 **Quick inspection:**
 ```bash
-# View customers
-sqlite3 demo_output/sqlite/data.db "SELECT * FROM Customers LIMIT 3;"
+# List all tables
+sqlite3 demo_output/sqlite/data.db ".tables"
 
-# Check FK relationships
-sqlite3 demo_output/sqlite/data.db "
-SELECT c.first_name, c.last_name, ca.loan_type, ca.requested_amount
-FROM Customers c
-JOIN CreditApplications ca ON c.customer_id = ca.customer_id
-LIMIT 5;"
+# View first table
+sqlite3 demo_output/sqlite/data.db "SELECT * FROM customers LIMIT 3;"
+
+# Check schema
+sqlite3 demo_output/sqlite/data.db ".schema"
 ```
 This project generates synthetic financial data by:
 1) building a schema from a business scenario,
@@ -132,15 +131,15 @@ This generator is not pure random Faker output. It applies business/domain logic
 ## Assignment requirement coverage
 
 ### Requirement 1 - Schema generation
-Input: business data scenario prompt.  
+Input: business data scenario prompt.
 Output: generated relational schema (`schema.json`) with validation report.
 
 How it is met:
-- Multiple tables: e.g., `Customers`, `LoanApplications`, `LoanAccounts`, `PaymentHistory`.
-- PK/FK: each table has a primary key; foreign keys are validated.
-- Numerical fields: score, amount, balance, rate, fees.
-- Categorical fields: status, purpose, type.
-- Semi-structured fields: JSON and XML columns (for example `address_json`, `terms_and_conditions_xml`).
+- Multiple tables with relationships (see `schema.json`)
+- PK/FK: each table has a primary key; foreign keys are validated
+- Numerical fields: amounts, scores, rates, balances
+- Categorical fields: status, type, category columns
+- Semi-structured fields: JSON and XML columns (marked with `field_role: json/xml`)
 
 Reference artifacts:
 - `demo_output/schema.json`
@@ -196,7 +195,7 @@ echo "GEMINI_API_KEY=your_key" > .env
 echo "OPENAI_API_KEY=your_key" > .env
 
 # 3. Run validation on sample output
-python tests/validate_output.py demo_output
+python validate_submission.py demo_output
 
 # 4. Run test suite
 uv run pytest tests/test_sample_output.py -v
@@ -210,19 +209,20 @@ uv run python main.py "credit risk"
 
 ## Data Quality Validation
 
-This submission includes validation tools that prove data correctness:
+This submission includes comprehensive validation that proves data correctness:
 
-**Schema-Agnostic Validator** (`validate_output.py`):
+**Comprehensive Validator** (`validate_submission.py`):
+
+*Structural Validation:*
 - ✅ FK integrity - all references point to existing parent records
 - ✅ Null constraints - non-nullable columns have no NULLs
 - ✅ Data types - numeric columns contain only numbers
-- ✅ Temporal ordering - dates follow logical sequence
 
-**Business Logic Tests** (`tests/test_sample_output.py`):
-- ✅ Positive amounts and income
-- ✅ Credit scores in valid range (300-850)
-- ✅ Debt-to-income ratios between 0-1
-- ✅ Valid JSON in semi-structured fields
+*Business Logic Validation:*
+- ✅ Temporal ordering - dates follow logical sequence from schema
+- ✅ State distributions - status fields have realistic variety
+- ✅ Semi-structured data - JSON/XML validation
+- ✅ Distribution analysis - numerical and categorical columns
 
-Run validation: `python tests/validate_output.py demo_output`
+Run validation: `python validate_submission.py [output_dir]`
 Run tests: `uv run pytest tests/test_sample_output.py -v`

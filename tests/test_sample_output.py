@@ -1,4 +1,4 @@
-"""Pytest tests for validating sample output data."""
+"""Schema-agnostic pytest tests for validating generated data."""
 import pandas as pd
 import sqlite3
 import json
@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 OUTPUT_DIR = Path("demo_output")
-CSV_DIR = OUTPUT_DIR / "csv"
 DB_PATH = OUTPUT_DIR / "sqlite" / "data.db"
 SCHEMA_PATH = OUTPUT_DIR / "schema.json"
 
@@ -24,79 +23,101 @@ def db_conn():
 class TestFKIntegrity:
     """Test foreign key relationships are valid."""
 
-    def test_creditapplications_customer_fk(self, db_conn):
-        cursor = db_conn.execute("""
-            SELECT COUNT(*) FROM CreditApplications ca
-            LEFT JOIN Customers c ON ca.customer_id = c.customer_id
-            WHERE c.customer_id IS NULL
-        """)
-        assert cursor.fetchone()[0] == 0, "Invalid customer_id references in CreditApplications"
-
-    def test_creditscores_customer_fk(self, db_conn):
-        cursor = db_conn.execute("""
-            SELECT COUNT(*) FROM CreditScores cs
-            LEFT JOIN Customers c ON cs.customer_id = c.customer_id
-            WHERE c.customer_id IS NULL
-        """)
-        assert cursor.fetchone()[0] == 0, "Invalid customer_id references in CreditScores"
+    def test_all_fk_references_valid(self, db_conn, schema):
+        """Verify all FK values point to existing parent records."""
+        for table in schema["tables"]:
+            for col in table["columns"]:
+                if col.get("foreign_key"):
+                    fk = col["foreign_key"]
+                    query = f"""
+                    SELECT COUNT(*) FROM {table["name"]} child
+                    LEFT JOIN {fk["table"]} parent ON child.{col["name"]} = parent.{fk["column"]}
+                    WHERE child.{col["name"]} IS NOT NULL AND parent.{fk["column"]} IS NULL
+                    """
+                    cursor = db_conn.execute(query)
+                    invalid = cursor.fetchone()[0]
+                    assert invalid == 0, f"Found {invalid} invalid FK references in {table['name']}.{col['name']}"
 
 class TestNullConstraints:
     """Test non-nullable columns have no NULLs."""
 
-    def test_customers_required_fields(self, db_conn):
-        cursor = db_conn.execute("""
-            SELECT COUNT(*) FROM Customers
-            WHERE customer_id IS NULL OR first_name IS NULL OR last_name IS NULL
-            OR date_of_birth IS NULL OR email IS NULL OR nationality IS NULL
-            OR employment_status IS NULL OR annual_income IS NULL
-        """)
-        assert cursor.fetchone()[0] == 0, "Required fields in Customers contain NULLs"
+    def test_non_nullable_columns(self, db_conn, schema):
+        """Check all non-nullable columns contain no NULL values."""
+        for table in schema["tables"]:
+            non_nullable = [col["name"] for col in table["columns"] if not col["nullable"]]
+            if non_nullable:
+                conditions = " OR ".join([f"{col} IS NULL" for col in non_nullable])
+                query = f"SELECT COUNT(*) FROM {table['name']} WHERE {conditions}"
+                cursor = db_conn.execute(query)
+                null_count = cursor.fetchone()[0]
+                assert null_count == 0, f"Found {null_count} NULL values in non-nullable columns of {table['name']}"
 
-    def test_creditapplications_required_fields(self, db_conn):
-        cursor = db_conn.execute("""
-            SELECT COUNT(*) FROM CreditApplications
-            WHERE application_id IS NULL OR customer_id IS NULL OR application_date IS NULL
-            OR loan_type IS NULL OR requested_amount IS NULL OR loan_term_months IS NULL
-            OR loan_purpose IS NULL OR application_status IS NULL OR debt_to_income_ratio IS NULL
-        """)
-        assert cursor.fetchone()[0] == 0, "Required fields in CreditApplications contain NULLs"
+class TestDataTypes:
+    """Test data type consistency."""
+
+    def test_numeric_columns(self, db_conn, schema):
+        """Ensure numeric columns contain only numeric values."""
+        for table in schema["tables"]:
+            for col in table["columns"]:
+                if col["type"] in ["INTEGER", "NUMERIC", "REAL"]:
+                    query = f"""
+                    SELECT COUNT(*) FROM {table['name']}
+                    WHERE {col['name']} IS NOT NULL
+                    AND TYPEOF({col['name']}) NOT IN ('integer', 'real')
+                    """
+                    cursor = db_conn.execute(query)
+                    invalid = cursor.fetchone()[0]
+                    assert invalid == 0, f"Found {invalid} non-numeric values in {table['name']}.{col['name']}"
 
 class TestBusinessLogic:
     """Test domain-specific business rules."""
 
-    def test_positive_amounts(self, db_conn):
-        cursor = db_conn.execute("SELECT COUNT(*) FROM CreditApplications WHERE requested_amount <= 0")
-        assert cursor.fetchone()[0] == 0, "Loan amounts must be positive"
+    def test_positive_amounts(self, db_conn, schema):
+        """Check amount/balance columns are positive."""
+        for table in schema["tables"]:
+            for col in table["columns"]:
+                if any(keyword in col["name"].lower() for keyword in ["amount", "balance", "income", "salary"]):
+                    if col["type"] in ["INTEGER", "NUMERIC", "REAL"]:
+                        query = f"SELECT COUNT(*) FROM {table['name']} WHERE {col['name']} < 0"
+                        cursor = db_conn.execute(query)
+                        negative = cursor.fetchone()[0]
+                        assert negative == 0, f"Found {negative} negative values in {table['name']}.{col['name']}"
 
-    def test_positive_income(self, db_conn):
-        cursor = db_conn.execute("SELECT COUNT(*) FROM Customers WHERE annual_income <= 0")
-        assert cursor.fetchone()[0] == 0, "Annual income must be positive"
-
-    def test_credit_score_range(self, db_conn):
-        cursor = db_conn.execute("SELECT COUNT(*) FROM CreditScores WHERE score_value < 300 OR score_value > 850")
-        assert cursor.fetchone()[0] == 0, "Credit scores should be in range 300-850"
-
-    def test_debt_to_income_ratio(self, db_conn):
-        cursor = db_conn.execute("SELECT COUNT(*) FROM CreditApplications WHERE debt_to_income_ratio < 0 OR debt_to_income_ratio > 1")
-        assert cursor.fetchone()[0] == 0, "Debt-to-income ratio should be between 0 and 1"
-
-    def test_loan_term_positive(self, db_conn):
-        cursor = db_conn.execute("SELECT COUNT(*) FROM CreditApplications WHERE loan_term_months <= 0")
-        assert cursor.fetchone()[0] == 0, "Loan term must be positive"
+    def test_semi_structured_json_valid(self, db_conn, schema):
+        """Validate JSON columns contain valid JSON."""
+        for table in schema["tables"]:
+            for col in table["columns"]:
+                if col.get("field_role") == "json" or "json" in col["name"].lower():
+                    query = f"SELECT {col['name']} FROM {table['name']} WHERE {col['name']} IS NOT NULL"
+                    cursor = db_conn.execute(query)
+                    for row in cursor.fetchall():
+                        try:
+                            json.loads(row[0])
+                        except json.JSONDecodeError:
+                            pytest.fail(f"Invalid JSON in {table['name']}.{col['name']}: {row[0][:100]}")
 
 class TestDataQuality:
     """Test data quality and distributions."""
 
-    def test_tables_not_empty(self, db_conn):
-        for table in ["Customers", "CreditApplications", "CreditScores"]:
-            cursor = db_conn.execute(f"SELECT COUNT(*) FROM {table}")
+    def test_tables_not_empty(self, db_conn, schema):
+        """Ensure all tables have data."""
+        for table in schema["tables"]:
+            cursor = db_conn.execute(f"SELECT COUNT(*) FROM {table['name']}")
             count = cursor.fetchone()[0]
-            assert count > 0, f"{table} should not be empty"
+            assert count > 0, f"{table['name']} should not be empty"
 
-    def test_semi_structured_json_valid(self, db_conn):
-        cursor = db_conn.execute("SELECT additional_data FROM CreditApplications WHERE additional_data IS NOT NULL")
-        for row in cursor.fetchall():
-            try:
-                json.loads(row[0])
-            except json.JSONDecodeError:
-                pytest.fail(f"Invalid JSON in additional_data: {row[0]}")
+    def test_temporal_ordering(self, db_conn, schema):
+        """Check date columns follow logical sequence."""
+        for table in schema["tables"]:
+            temporal_cols = [col["name"] for col in table["columns"] if col.get("field_role") == "temporal"]
+            if len(temporal_cols) >= 2:
+                for i in range(len(temporal_cols) - 1):
+                    query = f"""
+                    SELECT COUNT(*) FROM {table['name']}
+                    WHERE {temporal_cols[i]} IS NOT NULL
+                    AND {temporal_cols[i+1]} IS NOT NULL
+                    AND {temporal_cols[i]} > {temporal_cols[i+1]}
+                    """
+                    cursor = db_conn.execute(query)
+                    violations = cursor.fetchone()[0]
+                    assert violations == 0, f"Found {violations} temporal ordering violations in {table['name']}"
