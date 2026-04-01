@@ -71,7 +71,8 @@ def calculate_lambdas_batch(
     if temporal_col and temporal_col in parent_df.columns:
         lambdas = _apply_seasonality(lambdas, parent_df[temporal_col])
 
-    return np.clip(lambdas, 0.1, None)
+    # Clip to valid Poisson range AFTER all adjustments
+    return np.clip(lambdas, 0.1, 1000.0)
 
 
 def sample_event_counts_batch(
