@@ -437,8 +437,83 @@ def _generate_event_table(
         event_counts, total_events, entities, state, simulation, rng, fake
     )
 
+    # Enforce execution constraints (ExecutedQuantity ≤ OrderedQuantity)
+    df = _apply_execution_constraints(df, table, eligible, parent_pk_col)
+
     # Enforce temporal constraints on event table too
     df = _apply_temporal_constraints(df, table, constraints)
+
+    return df
+
+
+def _find_parent_pk_col(table: dict, parent_table: str) -> str | None:
+    """Find the parent PK column referenced by this event table's FK."""
+    for col in table["columns"]:
+        fk = col.get("foreign_key")
+        if fk and fk["table"] == parent_table:
+            return fk["column"]
+    return None
+
+
+def _apply_execution_constraints(
+    df: pl.DataFrame,
+    table: dict,
+    parent_df: pl.DataFrame,
+    parent_pk_col: str | None,
+) -> pl.DataFrame:
+    """Enforce ExecutedQuantity ≤ OrderedQuantity for trading execution events."""
+    if df.is_empty() or not parent_pk_col:
+        return df
+
+    table_name = table["name"].lower()
+    # Only apply to execution/trade tables
+    if "execution" not in table_name and "trade" not in table_name:
+        return df
+
+    # Find executed_quantity and ordered_quantity columns
+    exec_qty_col = None
+    order_qty_col = None
+
+    for col in df.columns:
+        col_lower = col.lower()
+        if "executed" in col_lower and "quantity" in col_lower:
+            exec_qty_col = col
+        elif "filled" in col_lower and "quantity" in col_lower:
+            exec_qty_col = col
+
+    for col in parent_df.columns:
+        col_lower = col.lower()
+        if "ordered" in col_lower and "quantity" in col_lower:
+            order_qty_col = col
+        elif "order" in col_lower and "quantity" in col_lower and "ordered" not in col_lower:
+            order_qty_col = col
+
+    if not exec_qty_col or not order_qty_col:
+        return df
+
+    # Join with parent to get ordered_quantity, then cap executed_quantity
+    parent_fk_col = None
+    for col in table["columns"]:
+        fk = col.get("foreign_key")
+        if fk and parent_pk_col and fk["column"] == parent_pk_col:
+            parent_fk_col = col["name"]
+            break
+
+    if not parent_fk_col or parent_fk_col not in df.columns:
+        return df
+
+    # Join and cap
+    df = df.join(
+        parent_df.select([parent_pk_col, order_qty_col]),
+        left_on=parent_fk_col,
+        right_on=parent_pk_col,
+        how="left"
+    ).with_columns(
+        pl.when(pl.col(exec_qty_col) > pl.col(order_qty_col))
+        .then(pl.col(order_qty_col))
+        .otherwise(pl.col(exec_qty_col))
+        .alias(exec_qty_col)
+    ).drop(order_qty_col)
 
     return df
 
