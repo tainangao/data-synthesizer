@@ -438,6 +438,16 @@ class DeltaWriter:
             else:
                 table_path.unlink()
         arrow_table = df.to_arrow()
+        # Cast Null types to string to avoid Delta Lake errors
+        schema = arrow_table.schema
+        new_fields = []
+        for field in schema:
+            if self._pa.types.is_null(field.type):
+                new_fields.append(self._pa.field(field.name, self._pa.string(), nullable=field.nullable))
+            else:
+                new_fields.append(field)
+        if new_fields != list(schema):
+            arrow_table = arrow_table.cast(self._pa.schema(new_fields))
         self._write_deltalake(str(table_path), arrow_table, mode="overwrite")
         self.table_paths[table_name] = table_path
 
