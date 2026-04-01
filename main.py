@@ -1,5 +1,7 @@
 from pathlib import Path
 import logging
+import sys
+import os
 
 from src.gen_schema import generate_schema, convert_schema, table_order
 from src.gen_config import translate_and_validate
@@ -10,7 +12,7 @@ from src.utils.reporting import build_quality_report
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-OP_DIR = Path(__file__).parent / "output"
+OP_DIR = Path(__file__).parent / os.getenv("OUTPUT_DIR", "output")
 OP_DIR.mkdir(parents=True, exist_ok=True)
 
 RECORD_COUNT = 10
@@ -25,7 +27,8 @@ PARQUET_CHUNK_SIZE = 50000  # Rows per chunk for Parquet/Delta (for memory effic
 
 
 def main():
-    schema = generate_schema(user_prompt="credit risk", out_dir=OP_DIR)
+    scenario = sys.argv[1] if len(sys.argv) > 1 else "credit risk"
+    schema = generate_schema(user_prompt=scenario, out_dir=OP_DIR)
 
     convert_schema(
         schema=schema,
