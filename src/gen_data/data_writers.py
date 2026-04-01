@@ -122,6 +122,10 @@ class CSVWriter:
         path = self.out_dir / f"{safe_name(table_name)}.csv"
         df.write_csv(path)
 
+    def update_dataframe(self, table: dict, df: pl.DataFrame) -> None:
+        """Update CSV by rewriting the entire file."""
+        self.write_dataframe(table, df)
+
     def close(self) -> None:
         self.end_table()
 
@@ -336,6 +340,10 @@ class ParquetWriter:
         df.write_parquet(path)
         self.table_paths[table_name] = path
 
+    def update_dataframe(self, table: dict, df: pl.DataFrame) -> None:
+        """Update Parquet by rewriting the entire file."""
+        self.write_dataframe(table, df)
+
     def close(self) -> None:
         self.end_table()
 
@@ -432,6 +440,10 @@ class DeltaWriter:
         arrow_table = df.to_arrow()
         self._write_deltalake(str(table_path), arrow_table, mode="overwrite")
         self.table_paths[table_name] = table_path
+
+    def update_dataframe(self, table: dict, df: pl.DataFrame) -> None:
+        """Update Delta by rewriting the entire table."""
+        self.write_dataframe(table, df)
 
     def close(self) -> None:
         self.end_table()

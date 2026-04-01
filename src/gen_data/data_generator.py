@@ -92,6 +92,11 @@ def generate_data(
             table, event_config, entities, constraints, state, simulation, rng, fake
         )
 
+        if df.is_empty():
+            logger.warning(f"Skipping empty event table: {event_table_name}")
+            row_counts[event_table_name] = 0
+            continue
+
         # Update parent balance if applicable
         _update_parent_balance(table, df, event_config, state, tables_by_name, writers)
 
@@ -660,7 +665,7 @@ def _apply_lifecycle_triggers(
         table_def = tables_by_name[table_name]
         updated_df = state["table_dfs"][table_name]
         for writer in writers:
-            writer.write_dataframe(table_def, updated_df)
+            writer.update_dataframe(table_def, updated_df)
 
 
 def _update_parent_balance(
