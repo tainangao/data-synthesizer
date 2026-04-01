@@ -392,6 +392,10 @@ def _generate_event_table(
         return pl.DataFrame()
 
     parent_pk_col = _find_parent_pk_col(table, parent_table)
+    if not parent_pk_col:
+        logger.warning(f"No parent PK column found for event table {table['name']} (parent: {parent_table})")
+        return pl.DataFrame()
+
     parent_state_field = _find_state_field(parent_df)
 
     eligible = filter_eligible_parents(parent_df, parent_state_field, emit_when_states)
@@ -458,7 +462,7 @@ def _build_event_dataframe(
     sim_end = simulation.get("end_date")
 
     # Repeat parent row indices so we can look up any parent column per event
-    parent_pk_values = eligible[parent_pk_col].to_list() if parent_pk_col else []
+    parent_pk_values = eligible[parent_pk_col].to_list()
     repeated_parent_pks: list = []
     for pk, cnt in zip(parent_pk_values, event_counts):
         repeated_parent_pks.extend([pk] * int(cnt))
