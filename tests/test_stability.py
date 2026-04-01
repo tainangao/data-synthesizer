@@ -9,12 +9,8 @@ from pathlib import Path
 SCENARIOS = [
     "credit risk",
     "retail banking",
-    "insurance claims",
-    "e-commerce orders",
-    "healthcare patients",
-    "supply chain logistics",
-    "customer support tickets",
     "financial trading",
+    'banking CRM',
 ]
 
 
@@ -28,7 +24,7 @@ def run_scenario(scenario: str) -> tuple[str, bool, str]:
             capture_output=True,
             text=True,
             timeout=120,
-            cwd=Path(__file__).parent,
+            cwd=Path(__file__).parent.parent,
             env=env,
         )
         success = result.returncode == 0
