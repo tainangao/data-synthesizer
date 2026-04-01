@@ -19,10 +19,15 @@ def table_order(schema: dict) -> list[str]:
         for name, table in tables.items()
     }
 
+    # Remove dependencies on tables that don't exist in schema
+    for name in deps:
+        deps[name] = {d for d in deps[name] if d in tables}
+
     order: list[str] = []
     while deps:
         ready = sorted(name for name, need in deps.items() if need.issubset(set(order)))
         if not ready:
+            # Circular dependency - add remaining in sorted order
             order.extend(sorted(deps.keys()))
             break
         for name in ready:
