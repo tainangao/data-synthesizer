@@ -11,6 +11,10 @@ SCENARIOS = [
     "retail banking",
     "financial trading",
     'banking CRM',
+    'wholdsale banking',
+    'institutional banking',
+    'investment banking',
+    'day trading',
 ]
 
 
