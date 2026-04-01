@@ -149,14 +149,12 @@ def _generate_entity_table(
             fk = col["foreign_key"]
             parent_table = fk["table"]
             parent_pks = state["pk_values"].get(parent_table, [])
-            if parent_pks:
-                columns[col_name] = rng.choices(parent_pks, k=count)
-            else:
-                logger.warning(
+            if not parent_pks:
+                raise ValueError(
                     f"No parent PKs found for FK {table_name}.{col_name} → {parent_table}. "
-                    "Check generation_order in config."
+                    f"Ensure {parent_table} is generated before {table_name} in generation_order."
                 )
-                columns[col_name] = [None] * count
+            columns[col_name] = rng.choices(parent_pks, k=count)
 
     # ── Pass 2: Remaining columns ───────────────────────────────────
     for col in table["columns"]:
@@ -550,6 +548,11 @@ def _propagate_fk_from_parent(
                 if fk["table"].lower() in k.lower() or k.lower() in fk["table"].lower():
                     val = v
                     break
+        if val is None:
+            raise ValueError(
+                f"Cannot propagate FK {fk['table']}.{fk['column']} from parent row (parent_pk={parent_pk}). "
+                f"Parent row does not contain the required FK column."
+            )
         result.append(val)
     return result
 
