@@ -14,6 +14,21 @@ from faker import Faker
 
 
 # ---------------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------------
+
+
+def add_business_days(start_date: datetime, days: int) -> datetime:
+    """Add business days to a date, skipping weekends."""
+    current = start_date
+    while days > 0:
+        current += timedelta(days=1)
+        if current.weekday() < 5:  # Monday=0, Sunday=6
+            days -= 1
+    return current
+
+
+# ---------------------------------------------------------------------------
 # Batch column generators — return list[T] of `count` values
 # ---------------------------------------------------------------------------
 
@@ -152,7 +167,10 @@ def generate_temporal_column(
 
     # Relative dates anchored within the same row (e.g., end_date = start_date + offset)
     if anchor_series is not None:
-        if "end" in col_name or "close" in col_name or "maturity" in col_name:
+        if "settlement" in col_name:
+            # T+2 business days for settlement dates
+            return [add_business_days(a, 2) for a in anchor_series]
+        elif "end" in col_name or "close" in col_name or "maturity" in col_name:
             return [a + timedelta(days=rng.randint(30, 365)) for a in anchor_series]
         elif "due" in col_name or "scheduled" in col_name:
             return [a + timedelta(days=rng.randint(1, 90)) for a in anchor_series]
