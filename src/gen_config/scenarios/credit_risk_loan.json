@@ -1,0 +1,65 @@
+{
+  "state_machine": {
+    "state_field": "loan_status",
+    "initial_state": "Current",
+    "transitions": {
+      "Current": {
+        "Current": {
+          "base_prob": 0.94,
+          "adjustments": [
+            {"field": "credit_score", "direction": "higher_increases", "strength": "moderate"}
+          ]
+        },
+        "Delinquent": {
+          "base_prob": 0.03,
+          "adjustments": [
+            {"field": "credit_score", "direction": "higher_decreases", "strength": "strong"},
+            {"field": "debt_to_income", "direction": "higher_increases", "strength": "moderate"}
+          ]
+        },
+        "Paid in Full": {
+          "base_prob": 0.03,
+          "adjustments": []
+        }
+      },
+      "Delinquent": {
+        "Current": {
+          "base_prob": 0.20,
+          "adjustments": []
+        },
+        "Delinquent": {
+          "base_prob": 0.60,
+          "adjustments": []
+        },
+        "Default": {
+          "base_prob": 0.15,
+          "adjustments": [
+            {"field": "credit_score", "direction": "higher_decreases", "strength": "strong"}
+          ]
+        },
+        "Paid in Full": {
+          "base_prob": 0.05,
+          "adjustments": []
+        }
+      },
+      "Default": {
+        "Current": {
+          "base_prob": 0.05,
+          "adjustments": []
+        },
+        "Delinquent": {
+          "base_prob": 0.10,
+          "adjustments": []
+        },
+        "Default": {
+          "base_prob": 0.70,
+          "adjustments": []
+        },
+        "Charged-off": {
+          "base_prob": 0.15,
+          "adjustments": []
+        }
+      }
+    }
+  }
+}

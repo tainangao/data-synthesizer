@@ -148,6 +148,7 @@ class SQLiteWriter:
         self.conn.execute("PRAGMA temp_store = MEMORY")
 
         tables_by_name = {t["name"]: t for t in schema["tables"]}
+        self._existing_tables = set(tables_by_name.keys())
         for table_name in order:
             self._create_table(tables_by_name[table_name])
 
@@ -183,7 +184,7 @@ class SQLiteWriter:
             columns_sql.append(clause)
 
             fk = col.get("foreign_key")
-            if fk:
+            if fk and fk["table"] in self._existing_tables:
                 fk_sql.append(
                     f'FOREIGN KEY("{name}") REFERENCES "{fk["table"]}"("{fk["column"]}")'
                 )

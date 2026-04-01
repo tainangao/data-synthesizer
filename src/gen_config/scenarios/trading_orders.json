@@ -1,0 +1,12 @@
+{
+  "event": {
+    "emitted_by": "Traders",
+    "emit_when_states": ["Active"],
+    "frequency": {
+      "lambda_base": 10.0,
+      "lambda_modifiers": [
+        {"field": "trader_type", "effect": "higher_increases"}
+      ]
+    }
+  }
+}

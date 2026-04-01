@@ -1,0 +1,12 @@
+{
+  "event": {
+    "emitted_by": "LoanAccounts",
+    "emit_when_states": ["Current", "Delinquent"],
+    "frequency": {
+      "lambda_base": 1.0,
+      "lambda_modifiers": [
+        {"field": "credit_score", "effect": "higher_increases"}
+      ]
+    }
+  }
+}

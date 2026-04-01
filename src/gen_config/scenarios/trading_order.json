@@ -1,0 +1,40 @@
+{
+  "state_machine": {
+    "state_field": "order_status",
+    "initial_state": "Open",
+    "transitions": {
+      "Open": {
+        "Open": {
+          "base_prob": 0.40,
+          "adjustments": []
+        },
+        "Partial Fill": {
+          "base_prob": 0.20,
+          "adjustments": []
+        },
+        "Filled": {
+          "base_prob": 0.30,
+          "adjustments": []
+        },
+        "Cancelled": {
+          "base_prob": 0.10,
+          "adjustments": []
+        }
+      },
+      "Partial Fill": {
+        "Partial Fill": {
+          "base_prob": 0.30,
+          "adjustments": []
+        },
+        "Filled": {
+          "base_prob": 0.60,
+          "adjustments": []
+        },
+        "Cancelled": {
+          "base_prob": 0.10,
+          "adjustments": []
+        }
+      }
+    }
+  }
+}

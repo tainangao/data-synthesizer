@@ -15,7 +15,7 @@ from .event_emitter import (
     sample_event_counts_batch,
 )
 from .state_machine import apply_state_machine_batch
-from .value_generators import find_inheritable_field, generate_column
+from .value_generators import find_inheritable_field, generate_column, generate_risk_from_segment
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +118,19 @@ def generate_data(
 # ── Entity table generation ─────────────────────────────────────────────
 
 
+def _apply_feature_correlations(df: pl.DataFrame, rng: random.Random) -> pl.DataFrame:
+    """Apply feature correlations: segment influences risk."""
+
+    segment_col = next((c for c in df.columns if "segment" in c.lower()), None)
+    risk_col = next((c for c in df.columns if "risk" in c.lower()), None)
+
+    if segment_col and risk_col:
+        correlated_risk = [generate_risk_from_segment(seg, rng) for seg in df[segment_col].to_list()]
+        df = df.with_columns(pl.Series(risk_col, correlated_risk))
+
+    return df
+
+
 def _generate_entity_table(
     table: dict,
     count: int,
@@ -151,8 +164,8 @@ def _generate_entity_table(
             parent_pks = state["pk_values"].get(parent_table, [])
             if not parent_pks:
                 raise ValueError(
-                    f"No parent PKs found for FK {table_name}.{col_name} → {parent_table}. "
-                    f"Ensure {parent_table} is generated before {table_name} in generation_order."
+                    f"Parent table '{parent_table}' not found for FK {table_name}.{col_name}. "
+                    f"This indicates a schema generation bug - FK references must be validated during schema generation."
                 )
             columns[col_name] = rng.choices(parent_pks, k=count)
 
@@ -189,6 +202,9 @@ def _generate_entity_table(
     # ── Assemble DataFrame ──────────────────────────────────────────
     col_order = [c["name"] for c in table["columns"]]
     df = pl.DataFrame({name: columns[name] for name in col_order if name in columns})
+
+    # ── Apply feature correlations ──────────────────────────────────
+    df = _apply_feature_correlations(df, rng)
 
     # ── Apply state machine (overwrites status column) ──────────────
     if table_name in state_machines:
@@ -549,10 +565,12 @@ def _propagate_fk_from_parent(
                     val = v
                     break
         if val is None:
-            raise ValueError(
+            # FK column doesn't exist in parent - use None (will be handled as nullable)
+            logger.warning(
                 f"Cannot propagate FK {fk['table']}.{fk['column']} from parent row (parent_pk={parent_pk}). "
-                f"Parent row does not contain the required FK column."
+                f"Parent row does not contain the required FK column. Using None."
             )
+            val = None
         result.append(val)
     return result
 

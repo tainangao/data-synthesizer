@@ -1,6 +1,17 @@
 """Rule-based pattern matching for schema-to-config translation."""
 
+import json
 from datetime import datetime, timedelta
+from pathlib import Path
+
+
+def load_scenario_config(scenario: str, config_type: str) -> dict | None:
+    """Load scenario config from scenarios directory."""
+    scenarios_dir = Path(__file__).parent / "scenarios"
+    config_file = scenarios_dir / f"{scenario}_{config_type}.json"
+    if config_file.exists():
+        return json.loads(config_file.read_text())
+    return None
 
 
 def detect_scenario(schema: dict) -> str:
@@ -178,44 +189,81 @@ def build_crm_config(schema: dict) -> dict:
         status_field = find_status_field(table)
         if status_field and table_name not in relationships:  # Parent table
             entity_table = table_name
-            adjustments = build_adjustments(table, "crm")
-            state_machines.append({
-                "entity": table_name,
-                "state_field": status_field,
-                "initial_state": "Pending",
-                "terminal_states": ["Closed"],
-                "transitions": {
-                    "Pending": [
-                        {"to_state": "Active", "base_prob": 0.85, "adjustments": adjustments},
-                        {"to_state": "Closed", "base_prob": 0.15, "adjustments": []}
-                    ],
-                    "Active": [
-                        {"to_state": "Active", "base_prob": 0.85, "adjustments": []},
-                        {"to_state": "Dormant", "base_prob": 0.14, "adjustments": adjustments},
-                        {"to_state": "Closed", "base_prob": 0.01, "adjustments": []}
-                    ],
-                    "Dormant": [
-                        {"to_state": "Active", "base_prob": 0.1, "adjustments": []},
-                        {"to_state": "Dormant", "base_prob": 0.8, "adjustments": []},
-                        {"to_state": "Closed", "base_prob": 0.1, "adjustments": adjustments}
-                    ]
-                }
-            })
+
+            # Try to load scenario config, fallback to generated
+            scenario_config = load_scenario_config("crm", "account")
+            if scenario_config and "state_machine" in scenario_config:
+                sm = scenario_config["state_machine"]
+                # Convert transitions from dict format to list format
+                transitions_list = {}
+                for from_state, to_states in sm["transitions"].items():
+                    transitions_list[from_state] = []
+                    for to_state, config in to_states.items():
+                        transitions_list[from_state].append({
+                            "to_state": to_state,
+                            "base_prob": config["base_prob"],
+                            "adjustments": config.get("adjustments", [])
+                        })
+                state_machines.append({
+                    "entity": table_name,
+                    "state_field": status_field,
+                    "initial_state": sm["initial_state"],
+                    "terminal_states": ["Closed", "Rejected"],
+                    "transitions": transitions_list
+                })
+            else:
+                adjustments = build_adjustments(table, "crm")
+                state_machines.append({
+                    "entity": table_name,
+                    "state_field": status_field,
+                    "initial_state": "Pending",
+                    "terminal_states": ["Closed"],
+                    "transitions": {
+                        "Pending": [
+                            {"to_state": "Active", "base_prob": 0.85, "adjustments": adjustments},
+                            {"to_state": "Closed", "base_prob": 0.15, "adjustments": []}
+                        ],
+                        "Active": [
+                            {"to_state": "Active", "base_prob": 0.85, "adjustments": []},
+                            {"to_state": "Dormant", "base_prob": 0.14, "adjustments": adjustments},
+                            {"to_state": "Closed", "base_prob": 0.01, "adjustments": []}
+                        ],
+                        "Dormant": [
+                            {"to_state": "Active", "base_prob": 0.1, "adjustments": []},
+                            {"to_state": "Dormant", "base_prob": 0.8, "adjustments": []},
+                            {"to_state": "Closed", "base_prob": 0.1, "adjustments": adjustments}
+                        ]
+                    }
+                })
             break
 
     # Find event tables
     if entity_table:
         event_tables = detect_event_tables(schema, entity_table)
-        entity_table_obj = tables[entity_table]
-        modifiers = build_lambda_modifiers(entity_table_obj)
-        for event_table in event_tables:
-            events.append({
-                "event_table": event_table,
-                "emitted_by": entity_table,
-                "emit_when_states": ["Active"],
-                "lambda_base": 5.0,
-                "lambda_modifiers": modifiers
-            })
+
+        # Try to load scenario event config
+        event_config = load_scenario_config("crm", "transactions")
+        if event_config and "event" in event_config:
+            for event_table in event_tables:
+                evt = event_config["event"].copy()
+                events.append({
+                    "event_table": event_table,
+                    "emitted_by": entity_table,
+                    "emit_when_states": evt.get("emit_when_states", ["Active"]),
+                    "lambda_base": evt["frequency"]["lambda_base"],
+                    "lambda_modifiers": evt["frequency"].get("lambda_modifiers", [])
+                })
+        else:
+            entity_table_obj = tables[entity_table]
+            modifiers = build_lambda_modifiers(entity_table_obj)
+            for event_table in event_tables:
+                events.append({
+                    "event_table": event_table,
+                    "emitted_by": entity_table,
+                    "emit_when_states": ["Active"],
+                    "lambda_base": 5.0,
+                    "lambda_modifiers": modifiers
+                })
 
     # Add key distributions from schema fields
     for table_name, table in tables.items():
@@ -307,12 +355,35 @@ def build_credit_config(schema: dict) -> dict:
                 else:
                     # Loans table with full lifecycle
                     loan_table = table_name
-                    state_machines.append({
-                        "entity": table_name,
-                        "state_field": status_field,
-                        "initial_state": "Current",
-                        "terminal_states": ["Paid in Full", "Charged-off"],
-                        "transitions": {
+
+                    # Try to load scenario config
+                    scenario_config = load_scenario_config("credit_risk", "loan")
+                    if scenario_config and "state_machine" in scenario_config:
+                        sm = scenario_config["state_machine"]
+                        # Convert transitions from dict format to list format
+                        transitions_list = {}
+                        for from_state, to_states in sm["transitions"].items():
+                            transitions_list[from_state] = []
+                            for to_state, config in to_states.items():
+                                transitions_list[from_state].append({
+                                    "to_state": to_state,
+                                    "base_prob": config["base_prob"],
+                                    "adjustments": config.get("adjustments", [])
+                                })
+                        state_machines.append({
+                            "entity": table_name,
+                            "state_field": status_field,
+                            "initial_state": sm["initial_state"],
+                            "terminal_states": ["Paid in Full", "Charged-off"],
+                            "transitions": transitions_list
+                        })
+                    else:
+                        state_machines.append({
+                            "entity": table_name,
+                            "state_field": status_field,
+                            "initial_state": "Current",
+                            "terminal_states": ["Paid in Full", "Charged-off"],
+                            "transitions": {
                             "Current": [
                                 {"to_state": "Current", "base_prob": 0.94, "adjustments": []},
                                 {"to_state": "Delinquent", "base_prob": 0.03, "adjustments": adjustments},
@@ -336,16 +407,30 @@ def build_credit_config(schema: dict) -> dict:
     # Find payment/repayment event tables
     if loan_table:
         event_tables = detect_event_tables(schema, loan_table)
-        loan_table_obj = tables[loan_table]
-        modifiers = build_lambda_modifiers(loan_table_obj)
-        for event_table in event_tables:
-            events.append({
-                "event_table": event_table,
-                "emitted_by": loan_table,
-                "emit_when_states": ["Current", "Delinquent"],
-                "lambda_base": 1.0,
-                "lambda_modifiers": modifiers
-            })
+
+        # Try to load scenario event config
+        event_config = load_scenario_config("credit_risk", "payments")
+        if event_config and "event" in event_config:
+            for event_table in event_tables:
+                evt = event_config["event"].copy()
+                events.append({
+                    "event_table": event_table,
+                    "emitted_by": loan_table,
+                    "emit_when_states": evt.get("emit_when_states", ["Current", "Delinquent"]),
+                    "lambda_base": evt["frequency"]["lambda_base"],
+                    "lambda_modifiers": evt["frequency"].get("lambda_modifiers", [])
+                })
+        else:
+            loan_table_obj = tables[loan_table]
+            modifiers = build_lambda_modifiers(loan_table_obj)
+            for event_table in event_tables:
+                events.append({
+                    "event_table": event_table,
+                    "emitted_by": loan_table,
+                    "emit_when_states": ["Current", "Delinquent"],
+                    "lambda_base": 1.0,
+                    "lambda_modifiers": modifiers
+                })
 
     # Add key distributions from schema fields
     for table_name, table in tables.items():
@@ -419,13 +504,36 @@ def build_trading_config(schema: dict) -> dict:
             status_field = find_status_field(table)
             if status_field:
                 order_table = table_name
-                adjustments = build_adjustments(table, "trading")
-                state_machines.append({
-                    "entity": table_name,
-                    "state_field": status_field,
-                    "initial_state": "Open",
-                    "terminal_states": ["Filled", "Cancelled"],
-                    "transitions": {
+
+                # Try to load scenario config
+                scenario_config = load_scenario_config("trading", "order")
+                if scenario_config and "state_machine" in scenario_config:
+                    sm = scenario_config["state_machine"]
+                    # Convert transitions from dict format to list format
+                    transitions_list = {}
+                    for from_state, to_states in sm["transitions"].items():
+                        transitions_list[from_state] = []
+                        for to_state, config in to_states.items():
+                            transitions_list[from_state].append({
+                                "to_state": to_state,
+                                "base_prob": config["base_prob"],
+                                "adjustments": config.get("adjustments", [])
+                            })
+                    state_machines.append({
+                        "entity": table_name,
+                        "state_field": status_field,
+                        "initial_state": sm["initial_state"],
+                        "terminal_states": ["Filled", "Cancelled"],
+                        "transitions": transitions_list
+                    })
+                else:
+                    adjustments = build_adjustments(table, "trading")
+                    state_machines.append({
+                        "entity": table_name,
+                        "state_field": status_field,
+                        "initial_state": "Open",
+                        "terminal_states": ["Filled", "Cancelled"],
+                        "transitions": {
                         "Open": [
                             {"to_state": "Open", "base_prob": 0.4, "adjustments": []},
                             {"to_state": "Partial Fill", "base_prob": 0.2, "adjustments": adjustments},
@@ -444,16 +552,30 @@ def build_trading_config(schema: dict) -> dict:
     # Find execution/trade event tables
     if order_table:
         event_tables = detect_event_tables(schema, order_table)
-        order_table_obj = tables[order_table]
-        modifiers = build_lambda_modifiers(order_table_obj)
-        for event_table in event_tables:
-            events.append({
-                "event_table": event_table,
-                "emitted_by": order_table,
-                "emit_when_states": ["Open", "Partial Fill"],
-                "lambda_base": 2.0,
-                "lambda_modifiers": modifiers
-            })
+
+        # Try to load scenario event config
+        event_config = load_scenario_config("trading", "orders")
+        if event_config and "event" in event_config:
+            for event_table in event_tables:
+                evt = event_config["event"].copy()
+                events.append({
+                    "event_table": event_table,
+                    "emitted_by": order_table,
+                    "emit_when_states": evt.get("emit_when_states", ["Open", "Partial Fill"]),
+                    "lambda_base": evt["frequency"]["lambda_base"],
+                    "lambda_modifiers": evt["frequency"].get("lambda_modifiers", [])
+                })
+        else:
+            order_table_obj = tables[order_table]
+            modifiers = build_lambda_modifiers(order_table_obj)
+            for event_table in event_tables:
+                events.append({
+                    "event_table": event_table,
+                    "emitted_by": order_table,
+                    "emit_when_states": ["Open", "Partial Fill"],
+                    "lambda_base": 2.0,
+                    "lambda_modifiers": modifiers
+                })
 
     # Add key distributions from schema fields
     for table_name, table in tables.items():

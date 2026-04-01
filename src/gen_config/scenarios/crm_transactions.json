@@ -1,0 +1,14 @@
+{
+  "event": {
+    "emitted_by": "Customers",
+    "emit_when_states": ["Active"],
+    "frequency": {
+      "lambda_base": 5.0,
+      "lambda_modifiers": [
+        {"field": "customer_segment", "effect": "higher_increases"},
+        {"field": "income", "effect": "higher_increases"},
+        {"field": "account_age", "effect": "higher_increases"}
+      ]
+    }
+  }
+}

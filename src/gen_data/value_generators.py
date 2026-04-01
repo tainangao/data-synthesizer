@@ -78,6 +78,17 @@ def generate_numerical_column(
     return [rng.gauss(50, 20) for _ in range(count)]
 
 
+def generate_risk_from_segment(segment: str, rng: random.Random) -> str:
+    """Generate correlated risk based on segment."""
+    risk_map = {
+        "Retail": (["Low", "Medium", "High"], [50, 35, 15]),
+        "Mass Affluent": (["Low", "Medium", "High"], [70, 25, 5]),
+        "HNW": (["Low", "Medium", "High"], [85, 13, 2]),
+    }
+    categories, weights = risk_map.get(segment, (["Low", "Medium", "High"], [60, 30, 10]))
+    return rng.choices(categories, weights=weights)[0]
+
+
 def generate_categorical_column(
     col: dict, config_dist: dict | None, count: int, rng: random.Random, fake: Faker
 ) -> list[str]:
@@ -95,7 +106,7 @@ def generate_categorical_column(
     elif "profile" in col_name or "behavior" in col_name:
         return rng.choices(["Conservative", "Moderate", "Aggressive"], weights=[50, 35, 15], k=count)
     elif "segment" in col_name:
-        return rng.choices(["Mass", "Affluent", "Premium"], weights=[60, 30, 10], k=count)
+        return rng.choices(["Retail", "Mass Affluent", "HNW"], weights=[80, 15, 5], k=count)
     elif "risk" in col_name:
         return rng.choices(["Low", "Medium", "High"], weights=[60, 30, 10], k=count)
     elif "type" in col_name:

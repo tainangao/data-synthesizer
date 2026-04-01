@@ -1,0 +1,54 @@
+{
+  "state_machine": {
+    "state_field": "account_status",
+    "initial_state": "Pending",
+    "transitions": {
+      "Pending": {
+        "Active": {
+          "base_prob": 0.85,
+          "adjustments": []
+        },
+        "Rejected": {
+          "base_prob": 0.05,
+          "adjustments": []
+        },
+        "Pending": {
+          "base_prob": 0.10,
+          "adjustments": []
+        }
+      },
+      "Active": {
+        "Active": {
+          "base_prob": 0.85,
+          "adjustments": []
+        },
+        "Dormant": {
+          "base_prob": 0.14,
+          "adjustments": [
+            {"field": "balance", "direction": "higher_decreases", "strength": "moderate"}
+          ]
+        },
+        "Closed": {
+          "base_prob": 0.01,
+          "adjustments": []
+        }
+      },
+      "Dormant": {
+        "Active": {
+          "base_prob": 0.10,
+          "adjustments": []
+        },
+        "Dormant": {
+          "base_prob": 0.80,
+          "adjustments": []
+        },
+        "Closed": {
+          "base_prob": 0.10,
+          "adjustments": [
+            {"field": "balance", "direction": "higher_decreases", "strength": "strong"}
+          ]
+        }
+      }
+    }
+  }
+}
