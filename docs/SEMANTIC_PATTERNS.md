@@ -8,7 +8,7 @@ This document lists the semantic patterns used by `value_generators.py` to autom
 |---------|-------------|------------|----------------|
 | `score`, `rating` | Gaussian | mean=650, std=100 | 550, 720, 630 |
 | `rate`, `yield`, `interest` | Gaussian | mean=5.5, std=3.0 | 3.2%, 7.8%, 4.5% |
-| `amount`, `balance`, `principal` | Lognormal | mean=10, sigma=0.8 | 8500, 45000, 12000 |
+| `amount`, `balance`, `principal` | Lognormal | mu=8, sigma=1.2 | 8500, 45000, 12000 |
 | `age` | Gaussian (int) | mean=35, std=12 | 28, 42, 31 |
 | `quantity`, `count` | Lognormal (int) | mean=2, sigma=0.5 | 3, 7, 5 |
 
@@ -17,6 +17,7 @@ This document lists the semantic patterns used by `value_generators.py` to autom
 | Pattern | Categories | Weights | Example Values |
 |---------|-----------|---------|----------------|
 | `status`, `state` | Active, Inactive, Pending, Closed | 70, 10, 12, 8 | Active, Pending |
+| `profile`, `behavior` | Conservative, Moderate, Aggressive | 50, 35, 15 | Conservative, Moderate |
 | `segment` | Mass, Affluent, Premium | 60, 30, 10 | Mass, Affluent |
 | `risk` | Low, Medium, High | 60, 30, 10 | Low, Medium |
 | `type` | Standard, Premium, Enterprise | 60, 30, 10 | Standard, Premium |
@@ -54,10 +55,21 @@ This document lists the semantic patterns used by `value_generators.py` to autom
 
 | Pattern | Structure | Example |
 |---------|-----------|---------|
-| `preference`, `settings` | JSON with language, notifications, theme | `{"language": "en", "notifications": true}` |
-| `risk_model` | JSON with score, tier, factors | `{"score": 650, "tier": "Medium"}` |
-| `address`, `location` | JSON with street, city, country | `{"street": "123 Main", "city": "NYC"}` |
+| `preference`, `settings` | JSON with language, notifications, theme, marketing_opt_in | `{"language": "en", "notifications": true, "marketing_opt_in": false}` |
+| `risk_model` | JSON with score, tier, factors, model_version | `{"score": 650, "tier": "Medium", "model_version": "v2.3"}` |
+| `address`, `location` | JSON with street, city, country, postal_code | `{"street": "123 Main", "city": "NYC", "postal_code": "10001"}` |
 | `metadata`, `attribute` | JSON with source, created_by, tags | `{"source": "web", "tags": ["new"]}` |
+| Default JSON | JSON with value, count, active | `{"value": "word", "count": 5, "active": true}` |
+
+## XML Patterns
+
+| Pattern | Structure | Example |
+|---------|-----------|---------|
+| `transaction`, `payment` | XML with amount, channel, reference | `<transaction><amount currency="USD">1234.56</amount><channel>online</channel></transaction>` |
+| `risk`, `score` | XML with score, grade, factors | `<risk_assessment><score>650</score><grade>B</grade><factors>...</factors></risk_assessment>` |
+| `profile`, `customer` | XML with segment, channel, since | `<profile><segment>Retail</segment><channel>online</channel></profile>` |
+| `order`, `trade` | XML with instrument, quantity, price | `<order_details><instrument>AAPL</instrument><quantity>100</quantity></order_details>` |
+| Default XML | XML with id, value, status | `<data><id>AB-123456</id><value>word</value><status>active</status></data>` |
 
 ## Boolean Fields
 
