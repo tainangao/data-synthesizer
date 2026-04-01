@@ -2,8 +2,9 @@
 
 import json
 import sys
-import logging 
+import logging
 from pathlib import Path
+import pytest
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.gen_config.translate_config import translate_and_validate
+from src.gen_config.config_generator import translate_and_validate
 
 # Test scenarios
 SCENARIOS = [
@@ -20,11 +21,6 @@ SCENARIOS = [
         "prompt": "Credit risk management system with customers, loan applications, credit scores, and repayment tracking",
         "schema_file": "tests/e2e_output/credit_risk/schema.json"
     },
-    # {
-    #     "name": "crm",
-    #     "prompt": "CRM system with customers, accounts, transactions, and interactions",
-    #     "schema_file": 'tests/e2e_output/crm/schema.json'
-    # },
     {
         "name": "trading",
         "prompt": "Trading platform with traders, orders, executions, and settlements",
@@ -32,7 +28,11 @@ SCENARIOS = [
     }
 ]
 
-def test_scenario(scenario: dict):
+@pytest.fixture(params=SCENARIOS)
+def scenario(request):
+    return request.param
+
+def test_scenario(scenario):
     """Test translation for a single scenario."""
     logger.info(f"\n{'='*60}")
     logger.info(f"Testing: {scenario['name']}")

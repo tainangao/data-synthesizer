@@ -4,6 +4,7 @@ import json
 import sys
 import logging
 from pathlib import Path
+import pytest
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.gen_schema.schema_generator import generate_schema
-from src.gen_config.translate_config import translate_and_validate
+from src.gen_config.config_generator import translate_and_validate
 
 # Test scenarios
 SCENARIOS = [
@@ -30,7 +31,15 @@ SCENARIOS = [
     }
 ]
 
-def test_scenario(scenario: dict, output_dir: Path):
+@pytest.fixture(params=SCENARIOS)
+def scenario(request):
+    return request.param
+
+@pytest.fixture
+def output_dir(tmp_path):
+    return tmp_path / "e2e_output"
+
+def test_scenario(scenario, output_dir):
     """Test schema generation and config translation for a scenario."""
     logger.info(f"\n{'='*60}")
     logger.info(f"Testing: {scenario['name']}")
