@@ -2,8 +2,8 @@
   "scenario_name": "trading",
   "seed": 42,
   "simulation": {
-    "start_date": "2025-03-30",
-    "end_date": "2026-03-30"
+    "start_date": "2025-04-02",
+    "end_date": "2026-04-02"
   },
   "entities": {
     "Traders": {
@@ -94,23 +94,11 @@
           },
           "Partial Fill": {
             "base_prob": 0.2,
-            "adjustments": [
-              {
-                "field": "order_type",
-                "direction": "higher_increases",
-                "strength": "weak"
-              }
-            ]
+            "adjustments": []
           },
           "Filled": {
             "base_prob": 0.3,
-            "adjustments": [
-              {
-                "field": "order_type",
-                "direction": "higher_increases",
-                "strength": "weak"
-              }
-            ]
+            "adjustments": []
           },
           "Cancelled": {
             "base_prob": 0.1,
@@ -124,13 +112,7 @@
           },
           "Filled": {
             "base_prob": 0.6,
-            "adjustments": [
-              {
-                "field": "order_type",
-                "direction": "higher_increases",
-                "strength": "weak"
-              }
-            ]
+            "adjustments": []
           },
           "Cancelled": {
             "base_prob": 0.1,
@@ -144,15 +126,14 @@
     "Executions": {
       "emitted_by": "Orders",
       "emit_when_states": [
-        "Open",
-        "Partial Fill"
+        "Active"
       ],
       "frequency": {
         "distribution": "poisson",
-        "lambda_base": 2.0,
+        "lambda_base": 10.0,
         "lambda_modifiers": [
           {
-            "field": "order_type",
+            "field": "trader_type",
             "effect": "higher_increases"
           }
         ]
@@ -162,15 +143,14 @@
     "Settlements": {
       "emitted_by": "Orders",
       "emit_when_states": [
-        "Open",
-        "Partial Fill"
+        "Active"
       ],
       "frequency": {
         "distribution": "poisson",
-        "lambda_base": 2.0,
+        "lambda_base": 10.0,
         "lambda_modifiers": [
           {
-            "field": "order_type",
+            "field": "trader_type",
             "effect": "higher_increases"
           }
         ]

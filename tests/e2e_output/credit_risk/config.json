@@ -2,8 +2,8 @@
   "scenario_name": "credit_risk",
   "seed": 42,
   "simulation": {
-    "start_date": "2025-03-30",
-    "end_date": "2026-03-30"
+    "start_date": "2025-04-02",
+    "end_date": "2026-04-02"
   },
   "entities": {
     "Customers": {
@@ -163,13 +163,24 @@
         "Current": {
           "Current": {
             "base_prob": 0.94,
-            "adjustments": []
+            "adjustments": [
+              {
+                "field": "credit_score",
+                "direction": "higher_increases",
+                "strength": "moderate"
+              }
+            ]
           },
           "Delinquent": {
             "base_prob": 0.03,
             "adjustments": [
               {
-                "field": "principal_amount",
+                "field": "credit_score",
+                "direction": "higher_decreases",
+                "strength": "strong"
+              },
+              {
+                "field": "debt_to_income",
                 "direction": "higher_increases",
                 "strength": "moderate"
               }
@@ -193,9 +204,9 @@
             "base_prob": 0.15,
             "adjustments": [
               {
-                "field": "principal_amount",
-                "direction": "higher_increases",
-                "strength": "moderate"
+                "field": "credit_score",
+                "direction": "higher_decreases",
+                "strength": "strong"
               }
             ]
           },
@@ -219,13 +230,7 @@
           },
           "Charged-off": {
             "base_prob": 0.15,
-            "adjustments": [
-              {
-                "field": "principal_amount",
-                "direction": "higher_increases",
-                "strength": "moderate"
-              }
-            ]
+            "adjustments": []
           }
         }
       }
@@ -241,13 +246,24 @@
         "Current": {
           "Current": {
             "base_prob": 0.94,
-            "adjustments": []
+            "adjustments": [
+              {
+                "field": "credit_score",
+                "direction": "higher_increases",
+                "strength": "moderate"
+              }
+            ]
           },
           "Delinquent": {
             "base_prob": 0.03,
             "adjustments": [
               {
-                "field": "payment_amount",
+                "field": "credit_score",
+                "direction": "higher_decreases",
+                "strength": "strong"
+              },
+              {
+                "field": "debt_to_income",
                 "direction": "higher_increases",
                 "strength": "moderate"
               }
@@ -271,9 +287,9 @@
             "base_prob": 0.15,
             "adjustments": [
               {
-                "field": "payment_amount",
-                "direction": "higher_increases",
-                "strength": "moderate"
+                "field": "credit_score",
+                "direction": "higher_decreases",
+                "strength": "strong"
               }
             ]
           },
@@ -297,13 +313,7 @@
           },
           "Charged-off": {
             "base_prob": 0.15,
-            "adjustments": [
-              {
-                "field": "payment_amount",
-                "direction": "higher_increases",
-                "strength": "moderate"
-              }
-            ]
+            "adjustments": []
           }
         }
       }

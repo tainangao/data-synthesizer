@@ -130,6 +130,7 @@ def test_generate_event_table():
         simulation={"start_date": "2024-01-01", "end_date": "2024-12-31"},
         rng=rng,
         fake=fake,
+        state_machines={},
     )
 
     print("\n=== PARENT TABLE (accounts) ===")

@@ -89,7 +89,7 @@ def generate_data(
 
         logger.info(f"Generating events for table: {event_table_name}")
         df = _generate_event_table(
-            table, event_config, entities, constraints, state, simulation, rng, fake
+            table, event_config, entities, constraints, state, simulation, rng, fake, state_machines
         )
 
         if df.is_empty():
@@ -107,6 +107,9 @@ def generate_data(
 
     # Apply data-driven lifecycle triggers
     _apply_lifecycle_triggers(state, tables_by_name, events, writers)
+
+    # Validate constraints
+    _validate_constraints(state, constraints)
 
     # Close all writers
     for writer in writers:
@@ -397,6 +400,7 @@ def _generate_event_table(
     simulation: dict,
     rng: random.Random,
     fake: Faker,
+    state_machines: dict,
 ) -> pl.DataFrame:
     """Generate event rows based on parent entity states and Poisson distribution."""
     parent_table = event_config["emitted_by"]
@@ -417,7 +421,12 @@ def _generate_event_table(
 
     parent_state_field = _find_state_field(parent_df)
 
-    eligible = filter_eligible_parents(parent_df, parent_state_field, emit_when_states)
+    # Get terminal states from state_machines config
+    terminal_states = None
+    if parent_table in state_machines:
+        terminal_states = state_machines[parent_table].get("terminal_states", [])
+
+    eligible = filter_eligible_parents(parent_df, parent_state_field, emit_when_states, terminal_states)
     if eligible.is_empty():
         logger.info(f"  No eligible parents for {table['name']} (states: {emit_when_states})")
         return pl.DataFrame()
@@ -818,16 +827,37 @@ def _update_parent_balance(
         return
 
     # Determine transaction type (credit/debit)
-    event_table_lower = event_table["name"].lower()
-    is_payment = "payment" in event_table_lower or "repayment" in event_table_lower
+    # First check for transaction_type column, fallback to table name heuristic
+    sign = 1  # Default: credit (add to balance)
+
+    # Check for transaction_type/transaction_category column
+    type_col = None
+    for col in event_df.columns:
+        col_lower = col.lower()
+        if "transaction" in col_lower and ("type" in col_lower or "category" in col_lower):
+            type_col = col
+            break
+
+    if type_col:
+        # Use transaction_type values to determine sign
+        # For simplicity, assume all rows have same type (homogeneous event table)
+        first_type = event_df[type_col][0]
+        if first_type and isinstance(first_type, str):
+            type_lower = first_type.lower()
+            if any(x in type_lower for x in ["debit", "withdrawal", "payment", "repayment"]):
+                sign = -1
+    else:
+        # Fallback to table name heuristic
+        event_table_lower = event_table["name"].lower()
+        is_payment = "payment" in event_table_lower or "repayment" in event_table_lower
+        sign = -1 if is_payment else 1
 
     # Sum amounts by parent (payments reduce balance, transactions/deposits increase)
     balance_changes = event_df.group_by(parent_fk_col).agg(
         pl.col(amount_col).sum().alias("total_amount")
     )
 
-    # Update parent balance (subtract for payments, add for deposits)
-    sign = -1 if is_payment else 1
+    # Update parent balance using the sign calculated above
     updated_parent = parent_df.join(
         balance_changes, left_on=parent_pk_col, right_on=parent_fk_col, how="left"
     ).with_columns(
@@ -837,3 +867,30 @@ def _update_parent_balance(
     state["table_dfs"][parent_table_name] = updated_parent
 
     # Don't rewrite here - will be rewritten after lifecycle triggers
+
+
+def _validate_constraints(state: dict, constraints: list[dict]) -> None:
+    """Validate constraints on generated data."""
+    if not constraints:
+        return
+
+    for constraint in constraints:
+        constraint_type = constraint.get("type")
+
+        if constraint_type == "no_negative_balance":
+            _validate_no_negative_balance(state)
+
+
+def _validate_no_negative_balance(state: dict) -> None:
+    """Validate that balance columns are non-negative."""
+    for table_name, df in state["table_dfs"].items():
+        if df.is_empty():
+            continue
+
+        for col in df.columns:
+            if "balance" in col.lower():
+                negative_count = (df[col] < 0).sum()
+                if negative_count > 0:
+                    logger.warning(
+                        f"Constraint violation: {table_name}.{col} has {negative_count} negative values"
+                    )

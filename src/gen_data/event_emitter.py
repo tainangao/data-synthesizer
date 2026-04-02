@@ -87,11 +87,21 @@ def filter_eligible_parents(
     parent_df: pl.DataFrame,
     state_field: str | None,
     emit_when_states: list[str],
+    terminal_states: list[str] | None = None,
 ) -> pl.DataFrame:
-    """Filter parents to only those in eligible states."""
-    if not emit_when_states or not state_field or state_field not in parent_df.columns:
+    """Filter parents to only those in eligible states, excluding terminal states."""
+    if not state_field or state_field not in parent_df.columns:
         return parent_df
-    return parent_df.filter(pl.col(state_field).is_in(emit_when_states))
+
+    # Filter by emit_when_states if provided
+    if emit_when_states:
+        parent_df = parent_df.filter(pl.col(state_field).is_in(emit_when_states))
+
+    # Exclude terminal states
+    if terminal_states:
+        parent_df = parent_df.filter(~pl.col(state_field).is_in(terminal_states))
+
+    return parent_df
 
 
 def _apply_seasonality(lambdas: np.ndarray, temporal_col: pl.Series) -> np.ndarray:
