@@ -5,6 +5,7 @@ single-value generators (for event row fallback).
 """
 
 import json
+import math
 import random
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
@@ -26,6 +27,45 @@ def add_business_days(start_date: datetime, days: int) -> datetime:
         if current.weekday() < 5:  # Monday=0, Sunday=6
             days -= 1
     return current
+
+
+def _is_geographic_state_field(col_name: str) -> bool:
+    """Return True when a state-like column likely means geography, not lifecycle."""
+    if "state" not in col_name:
+        return False
+
+    if col_name in {
+        "state",
+        "state_code",
+        "state_abbr",
+        "state_abbreviation",
+        "us_state",
+        "us_state_code",
+    }:
+        return True
+
+    geo_hints = [
+        "address",
+        "billing",
+        "shipping",
+        "mailing",
+        "residence",
+        "location",
+        "city",
+        "country",
+        "postal",
+        "zip",
+        "home",
+        "office",
+        "branch",
+    ]
+    if any(hint in col_name for hint in geo_hints):
+        return True
+
+    if col_name.endswith("_state_code") or col_name.endswith("_state_abbr"):
+        return True
+
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +95,14 @@ def generate_numerical_column(
             mean, std = params.get("mean", 0), params.get("std", 1)
             return [rng.gauss(mean, std) for _ in range(count)]
         elif dist_type == "lognormal":
-            mu, sigma = params.get("mu", 2), params.get("sigma", 0.5)
+            sigma = params.get("sigma", 0.5)
+            if "mu" in params:
+                mu = params.get("mu", 2)
+            elif "mean" in params:
+                target_mean = params.get("mean", 0)
+                mu = math.log(target_mean) - (sigma**2) / 2 if target_mean > 0 else 2
+            else:
+                mu = 2
             return [rng.lognormvariate(mu, sigma) for _ in range(count)]
         elif dist_type == "uniform":
             low, high = params.get("low", 0), params.get("high", 100)
@@ -68,16 +115,37 @@ def generate_numerical_column(
         return [rng.gauss(650, 100) for _ in range(count)]  # Credit score range
     elif "rate" in col_name or "yield" in col_name or "interest" in col_name:
         return [rng.gauss(5.5, 3.0) for _ in range(count)]  # Percentage rates
-    elif "income" in col_name or "salary" in col_name or "revenue" in col_name or "earnings" in col_name:
-        return [round(rng.lognormvariate(11.0, 0.6), 2) for _ in range(count)]  # Annual income ~$60k median
+    elif (
+        "income" in col_name
+        or "salary" in col_name
+        or "revenue" in col_name
+        or "earnings" in col_name
+    ):
+        return [
+            round(rng.lognormvariate(11.0, 0.6), 2) for _ in range(count)
+        ]  # Annual income ~$60k median
     elif "limit" in col_name or "credit_limit" in col_name:
-        return [round(rng.lognormvariate(9.5, 0.7), 2) for _ in range(count)]  # Credit limit ~$13k median
-    elif "amount" in col_name or "balance" in col_name or "principal" in col_name or "payment" in col_name or "price" in col_name or "cost" in col_name or "fee" in col_name:
-        return [round(rng.lognormvariate(6.5, 1.0), 2) for _ in range(count)]  # General monetary ~$665 median
+        return [
+            round(rng.lognormvariate(9.5, 0.7), 2) for _ in range(count)
+        ]  # Credit limit ~$13k median
+    elif (
+        "amount" in col_name
+        or "balance" in col_name
+        or "principal" in col_name
+        or "payment" in col_name
+        or "price" in col_name
+        or "cost" in col_name
+        or "fee" in col_name
+    ):
+        return [
+            round(rng.lognormvariate(6.5, 1.0), 2) for _ in range(count)
+        ]  # General monetary ~$665 median
     elif "age" in col_name:
         return [int(rng.gauss(35, 12)) for _ in range(count)]  # Adult age distribution
     elif "quantity" in col_name or "count" in col_name:
-        return [int(rng.lognormvariate(2, 0.5)) for _ in range(count)]  # Small positive integers
+        return [
+            int(rng.lognormvariate(2, 0.5)) for _ in range(count)
+        ]  # Small positive integers
 
     return [round(rng.gauss(50, 20), 2) for _ in range(count)]
 
@@ -89,7 +157,9 @@ def generate_risk_from_segment(segment: str, rng: random.Random) -> str:
         "Mass Affluent": (["Low", "Medium", "High"], [70, 25, 5]),
         "HNW": (["Low", "Medium", "High"], [85, 13, 2]),
     }
-    categories, weights = risk_map.get(segment, (["Low", "Medium", "High"], [60, 30, 10]))
+    categories, weights = risk_map.get(
+        segment, (["Low", "Medium", "High"], [60, 30, 10])
+    )
     return rng.choices(categories, weights=weights)[0]
 
 
@@ -108,19 +178,41 @@ def generate_categorical_column(
     if "gender" in col_name or "sex" in col_name:
         return rng.choices(["Male", "Female"], weights=[50, 50], k=count)
     elif "marital" in col_name:
-        return rng.choices(["Single", "Married", "Divorced", "Widowed"], weights=[35, 45, 15, 5], k=count)
+        return rng.choices(
+            ["Single", "Married", "Divorced", "Widowed"],
+            weights=[35, 45, 15, 5],
+            k=count,
+        )
     elif "employment" in col_name:
-        return rng.choices(["Employed", "Self-Employed", "Unemployed", "Retired", "Student"], weights=[55, 20, 10, 10, 5], k=count)
+        return rng.choices(
+            ["Employed", "Self-Employed", "Unemployed", "Retired", "Student"],
+            weights=[55, 20, 10, 10, 5],
+            k=count,
+        )
+    elif _is_geographic_state_field(col_name):
+        if any(token in col_name for token in ["abbr", "abbreviation", "code"]):
+            return [fake.state_abbr() for _ in range(count)]
+        return [fake.state() for _ in range(count)]
     elif "status" in col_name or "state" in col_name:
-        return rng.choices(["Active", "Inactive", "Pending", "Closed"], weights=[70, 10, 12, 8], k=count)
+        return rng.choices(
+            ["Active", "Inactive", "Pending", "Closed"],
+            weights=[70, 10, 12, 8],
+            k=count,
+        )
     elif "profile" in col_name or "behavior" in col_name:
-        return rng.choices(["Conservative", "Moderate", "Aggressive"], weights=[50, 35, 15], k=count)
+        return rng.choices(
+            ["Conservative", "Moderate", "Aggressive"], weights=[50, 35, 15], k=count
+        )
     elif "segment" in col_name:
-        return rng.choices(["Retail", "Mass Affluent", "HNW"], weights=[80, 15, 5], k=count)
+        return rng.choices(
+            ["Retail", "Mass Affluent", "HNW"], weights=[80, 15, 5], k=count
+        )
     elif "risk" in col_name:
         return rng.choices(["Low", "Medium", "High"], weights=[60, 30, 10], k=count)
     elif "type" in col_name:
-        return rng.choices(["Standard", "Premium", "Enterprise"], weights=[60, 30, 10], k=count)
+        return rng.choices(
+            ["Standard", "Premium", "Enterprise"], weights=[60, 30, 10], k=count
+        )
     elif "currency" in col_name:
         return rng.choices(["USD", "EUR", "GBP", "JPY"], k=count)
     elif "country" in col_name:
@@ -129,9 +221,7 @@ def generate_categorical_column(
     return rng.choices(["A", "B", "C"], k=count)
 
 
-def generate_text_column(
-    col: dict, count: int, fake: Faker
-) -> list[str]:
+def generate_text_column(col: dict, count: int, fake: Faker) -> list[str]:
     """Batch-generate text values using Faker (inherently sequential)."""
     col_name = col["name"].lower()
 
@@ -178,13 +268,23 @@ def generate_temporal_column(
     """
     col_name = col["name"].lower()
 
-    start_dt = datetime.fromisoformat(simulation_start) if simulation_start else datetime(2020, 1, 1)
-    end_dt = datetime.fromisoformat(simulation_end) if simulation_end else datetime(2024, 12, 31)
+    start_dt = (
+        datetime.fromisoformat(simulation_start)
+        if simulation_start
+        else datetime(2020, 1, 1)
+    )
+    end_dt = (
+        datetime.fromisoformat(simulation_end)
+        if simulation_end
+        else datetime(2024, 12, 31)
+    )
 
     # Birth dates — not affected by parent floor
     if "birth" in col_name or "dob" in col_name:
         now = datetime.now()
-        return [now - timedelta(days=int(rng.gauss(35, 12)) * 365) for _ in range(count)]
+        return [
+            now - timedelta(days=int(rng.gauss(35, 12)) * 365) for _ in range(count)
+        ]
 
     # Relative dates anchored within the same row (e.g., end_date = start_date + offset)
     if anchor_series is not None:
@@ -205,10 +305,19 @@ def generate_temporal_column(
         if parent_temporal is not None and i < len(parent_temporal):
             pt = parent_temporal[i]
             if pt is not None:
-                floor = pt if isinstance(pt, datetime) else datetime.combine(pt, datetime.min.time())
+                floor = (
+                    pt
+                    if isinstance(pt, datetime)
+                    else datetime.combine(pt, datetime.min.time())
+                )
         effective_start = max(floor, start_dt) if floor else start_dt
         effective_delta = max((end_dt - effective_start).days, 0)
-        results.append(effective_start + timedelta(days=rng.randint(0, effective_delta) if effective_delta > 0 else 0))
+        results.append(
+            effective_start
+            + timedelta(
+                days=rng.randint(0, effective_delta) if effective_delta > 0 else 0
+            )
+        )
     return results
 
 
@@ -224,38 +333,58 @@ def generate_semi_structured_column(
         if col_type == "XML":
             results.append(_generate_xml(col_name, rng, fake))
         elif "preference" in col_name or "settings" in col_name:
-            results.append(json.dumps({
-                "language": rng.choice(["en", "es", "fr", "de"]),
-                "notifications": rng.choice([True, False]),
-                "theme": rng.choice(["light", "dark"]),
-                "marketing_opt_in": rng.choice([True, False]),
-            }))
+            results.append(
+                json.dumps(
+                    {
+                        "language": rng.choice(["en", "es", "fr", "de"]),
+                        "notifications": rng.choice([True, False]),
+                        "theme": rng.choice(["light", "dark"]),
+                        "marketing_opt_in": rng.choice([True, False]),
+                    }
+                )
+            )
         elif "risk" in col_name and "model" in col_name:
-            results.append(json.dumps({
-                "score": round(rng.gauss(650, 100), 2),
-                "tier": rng.choice(["Low", "Medium", "High"]),
-                "factors": [fake.word() for _ in range(rng.randint(2, 4))],
-                "model_version": f"v{rng.randint(1, 5)}.{rng.randint(0, 9)}",
-            }))
+            results.append(
+                json.dumps(
+                    {
+                        "score": round(rng.gauss(650, 100), 2),
+                        "tier": rng.choice(["Low", "Medium", "High"]),
+                        "factors": [fake.word() for _ in range(rng.randint(2, 4))],
+                        "model_version": f"v{rng.randint(1, 5)}.{rng.randint(0, 9)}",
+                    }
+                )
+            )
         elif "address" in col_name or "location" in col_name:
-            results.append(json.dumps({
-                "street": fake.street_address(),
-                "city": fake.city(),
-                "country": fake.country_code(),
-                "postal_code": fake.postcode(),
-            }))
+            results.append(
+                json.dumps(
+                    {
+                        "street": fake.street_address(),
+                        "city": fake.city(),
+                        "country": fake.country_code(),
+                        "postal_code": fake.postcode(),
+                    }
+                )
+            )
         elif "metadata" in col_name or "attribute" in col_name or "data" in col_name:
-            results.append(json.dumps({
-                "source": rng.choice(["web", "mobile", "branch", "api"]),
-                "created_by": fake.user_name(),
-                "tags": [fake.word() for _ in range(rng.randint(1, 3))],
-            }))
+            results.append(
+                json.dumps(
+                    {
+                        "source": rng.choice(["web", "mobile", "branch", "api"]),
+                        "created_by": fake.user_name(),
+                        "tags": [fake.word() for _ in range(rng.randint(1, 3))],
+                    }
+                )
+            )
         else:
-            results.append(json.dumps({
-                "value": fake.word(),
-                "count": rng.randint(1, 10),
-                "active": rng.choice([True, False]),
-            }))
+            results.append(
+                json.dumps(
+                    {
+                        "value": fake.word(),
+                        "count": rng.randint(1, 10),
+                        "active": rng.choice([True, False]),
+                    }
+                )
+            )
     return results
 
 
@@ -263,8 +392,12 @@ def _generate_xml(col_name: str, rng: random.Random, fake: Faker) -> str:
     """Generate domain-aware XML based on column name semantics."""
     if "transaction" in col_name or "payment" in col_name:
         root = ET.Element("transaction")
-        ET.SubElement(root, "amount", currency=rng.choice(["USD", "EUR", "GBP"])).text = str(round(rng.lognormvariate(6, 1), 2))
-        ET.SubElement(root, "channel").text = rng.choice(["online", "branch", "mobile", "atm"])
+        ET.SubElement(
+            root, "amount", currency=rng.choice(["USD", "EUR", "GBP"])
+        ).text = str(round(rng.lognormvariate(6, 1), 2))
+        ET.SubElement(root, "channel").text = rng.choice(
+            ["online", "branch", "mobile", "atm"]
+        )
         ET.SubElement(root, "reference").text = fake.bothify("TXN-????-########")
     elif "risk" in col_name or "score" in col_name:
         root = ET.Element("risk_assessment")
@@ -275,8 +408,12 @@ def _generate_xml(col_name: str, rng: random.Random, fake: Faker) -> str:
             ET.SubElement(factors, "factor").text = fake.word()
     elif "profile" in col_name or "customer" in col_name:
         root = ET.Element("profile")
-        ET.SubElement(root, "segment").text = rng.choice(["Retail", "Affluent", "Premium"])
-        ET.SubElement(root, "channel").text = rng.choice(["online", "branch", "referral"])
+        ET.SubElement(root, "segment").text = rng.choice(
+            ["Retail", "Affluent", "Premium"]
+        )
+        ET.SubElement(root, "channel").text = rng.choice(
+            ["online", "branch", "referral"]
+        )
         ET.SubElement(root, "since").text = str(rng.randint(2010, 2024))
     elif "order" in col_name or "trade" in col_name:
         root = ET.Element("order_details")
@@ -287,13 +424,13 @@ def _generate_xml(col_name: str, rng: random.Random, fake: Faker) -> str:
         root = ET.Element("data")
         ET.SubElement(root, "id").text = fake.bothify("??-######")
         ET.SubElement(root, "value").text = fake.word()
-        ET.SubElement(root, "status").text = rng.choice(["active", "inactive", "pending"])
+        ET.SubElement(root, "status").text = rng.choice(
+            ["active", "inactive", "pending"]
+        )
     return ET.tostring(root, encoding="unicode")
 
 
-def generate_boolean_column(
-    col: dict, count: int, rng: random.Random
-) -> list[bool]:
+def generate_boolean_column(col: dict, count: int, rng: random.Random) -> list[bool]:
     """Batch-generate boolean values."""
     col_name = col["name"].lower()
     if "active" in col_name or "enabled" in col_name:
@@ -332,7 +469,13 @@ def generate_column(
         return generate_text_column(col, count, fake)
     elif role == "temporal":
         return generate_temporal_column(
-            col, count, rng, simulation_start, simulation_end, anchor_series, parent_temporal
+            col,
+            count,
+            rng,
+            simulation_start,
+            simulation_end,
+            anchor_series,
+            parent_temporal,
         )
     elif role == "semi_structured":
         return generate_semi_structured_column(col, count, rng, fake)
@@ -368,7 +511,17 @@ def find_inheritable_field(col: dict, parent_columns: list[str]) -> str | None:
     # Semantic token match — token must appear as a whole word (bounded by _ or string edges)
     # to avoid false matches like "state" matching "address_state".
     import re
-    tokens = ["currency", "country", "segment", "risk", "type", "channel", "status", "grade"]
+
+    tokens = [
+        "currency",
+        "country",
+        "segment",
+        "risk",
+        "type",
+        "channel",
+        "status",
+        "grade",
+    ]
     for token in tokens:
         pattern = r"(^|_)" + token + r"(_|$)"
         if re.search(pattern, col_name):

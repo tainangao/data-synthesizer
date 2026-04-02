@@ -5,6 +5,7 @@ data generation system works with real (but minimal) data.
 """
 
 import random
+import statistics
 from datetime import datetime
 
 import polars as pl
@@ -14,6 +15,7 @@ from faker import Faker
 from gen_data.event_emitter import calculate_lambdas_batch, sample_event_counts_batch
 from gen_data.state_machine import apply_state_machine, apply_adjustments
 from gen_data.value_generators import (
+    generate_categorical_column,
     generate_numerical_column,
     generate_temporal_column,
     find_inheritable_field,
@@ -41,6 +43,51 @@ def test_semantic_field_generation():
     assert all(10 < a < 90 for a in ages), "Ages should be in reasonable range"
 
 
+def test_lognormal_config_supports_mean_parameter():
+    """Configured lognormal with arithmetic mean should preserve target scale."""
+    rng = random.Random(42)
+
+    income_col = {"name": "annual_income", "field_role": "numerical"}
+    config_dist = {
+        "distribution": "lognormal",
+        "params": {"mean": 60000, "sigma": 0.5},
+    }
+
+    values = generate_numerical_column(income_col, config_dist, 2000, rng)
+
+    assert min(values) > 0, "Lognormal values must be positive"
+    assert statistics.mean(values) > 20000, "Values should be generated at income scale"
+    assert statistics.median(values) > 20000, (
+        "Median should be in realistic income range"
+    )
+
+
+def test_geographic_state_generation_uses_us_states():
+    """State-like address fields should map to US states, not lifecycle statuses."""
+    rng = random.Random(42)
+    fake = Faker("en_US")
+    fake.seed_instance(42)
+
+    states = generate_categorical_column(
+        {"name": "address_state", "field_role": "categorical"},
+        None,
+        50,
+        rng,
+        fake,
+    )
+    state_codes = generate_categorical_column(
+        {"name": "state_code", "field_role": "categorical"},
+        None,
+        50,
+        rng,
+        fake,
+    )
+
+    disallowed = {"Active", "Inactive", "Pending", "Closed"}
+    assert set(states).isdisjoint(disallowed)
+    assert all(len(code) == 2 for code in state_codes)
+
+
 def test_temporal_anchor_within_row():
     """Demonstrate within-row temporal anchoring: end_date relative to start_date."""
     rng = random.Random(42)
@@ -48,18 +95,18 @@ def test_temporal_anchor_within_row():
     # Generate start dates
     start_col = {"name": "start_date", "field_role": "temporal"}
     start_dates = generate_temporal_column(
-        start_col, 3, rng,
-        simulation_start="2024-01-01",
-        simulation_end="2024-12-31"
+        start_col, 3, rng, simulation_start="2024-01-01", simulation_end="2024-12-31"
     )
 
     # Generate end dates anchored to start dates
     end_col = {"name": "end_date", "field_role": "temporal"}
     end_dates = generate_temporal_column(
-        end_col, 3, rng,
+        end_col,
+        3,
+        rng,
         simulation_start="2024-01-01",
         simulation_end="2024-12-31",
-        anchor_series=start_dates  # Key: anchor to start_dates
+        anchor_series=start_dates,  # Key: anchor to start_dates
     )
 
     # Verify: end_date > start_date for all rows
@@ -84,10 +131,12 @@ def test_temporal_floor_from_parent():
     # Generate child dates (e.g., transaction_date) with parent floor
     child_col = {"name": "transaction_date", "field_role": "temporal"}
     child_dates = generate_temporal_column(
-        child_col, 3, rng,
+        child_col,
+        3,
+        rng,
         simulation_start="2024-01-01",
         simulation_end="2024-12-31",
-        parent_temporal=parent_dates  # Key: parent floor constraint
+        parent_temporal=parent_dates,  # Key: parent floor constraint
     )
 
     # Verify: child_date >= parent_date for all rows
@@ -123,26 +172,39 @@ def test_state_machine_adjustments():
     # Row with low risk score
     low_risk_row = {"risk_score": 600}
     adjustments = {
-        "Declined": [{"field": "risk_score", "direction": "higher_increases", "strength": "strong"}]
+        "Declined": [
+            {
+                "field": "risk_score",
+                "direction": "higher_increases",
+                "strength": "strong",
+            }
+        ]
     }
-    adjusted_low = apply_adjustments(base_probs, low_risk_row, adjustments, {"risk_score": (300, 850)})
+    adjusted_low = apply_adjustments(
+        base_probs, low_risk_row, adjustments, {"risk_score": (300, 850)}
+    )
 
     # Row with high risk score
     high_risk_row = {"risk_score": 800}
-    adjusted_high = apply_adjustments(base_probs, high_risk_row, adjustments, {"risk_score": (300, 850)})
+    adjusted_high = apply_adjustments(
+        base_probs, high_risk_row, adjustments, {"risk_score": (300, 850)}
+    )
 
     # Verify: higher risk score increases "Declined" probability
-    assert adjusted_high["Declined"] > adjusted_low["Declined"], \
+    assert adjusted_high["Declined"] > adjusted_low["Declined"], (
         "Higher risk should increase Declined probability"
+    )
 
 
 def test_event_emission_poisson():
     """Demonstrate Poisson-based event generation with lambda modifiers."""
     # Create parent DataFrame with varying balance values
-    parent_df = pl.DataFrame({
-        "account_id": [1, 2, 3],
-        "balance": [1000.0, 50000.0, 100000.0],  # Low, medium, high
-    })
+    parent_df = pl.DataFrame(
+        {
+            "account_id": [1, 2, 3],
+            "balance": [1000.0, 50000.0, 100000.0],  # Low, medium, high
+        }
+    )
 
     # Calculate lambdas with balance modifier
     lambda_base = 2.0
@@ -150,8 +212,7 @@ def test_event_emission_poisson():
     lambdas = calculate_lambdas_batch(lambda_base, lambda_modifiers, parent_df)
 
     # Verify: higher balance increases lambda
-    assert lambdas[0] < lambdas[1] < lambdas[2], \
-        "Lambda should increase with balance"
+    assert lambdas[0] < lambdas[1] < lambdas[2], "Lambda should increase with balance"
 
     # Sample event counts
     event_counts = sample_event_counts_batch(lambdas, rng_seed=42)

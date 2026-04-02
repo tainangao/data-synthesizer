@@ -15,7 +15,11 @@ from .event_emitter import (
     sample_event_counts_batch,
 )
 from .state_machine import apply_state_machine_batch
-from .value_generators import find_inheritable_field, generate_column, generate_risk_from_segment
+from .value_generators import (
+    find_inheritable_field,
+    generate_column,
+    generate_risk_from_segment,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +57,8 @@ def generate_data(
 
     # State shared across tables for FK sampling and inheritance
     state: dict[str, Any] = {
-        "pk_values": {},   # {table: [pk_values]}
-        "table_dfs": {},   # {table: pl.DataFrame} — for joins / inheritance
+        "pk_values": {},  # {table: [pk_values]}
+        "table_dfs": {},  # {table: pl.DataFrame} — for joins / inheritance
     }
 
     row_counts: dict[str, int] = {}
@@ -69,7 +73,15 @@ def generate_data(
 
         logger.info(f"Generating {count} rows for entity table: {table_name}")
         df = _generate_entity_table(
-            table, count, entities, state_machines, constraints, state, simulation, rng, fake
+            table,
+            count,
+            entities,
+            state_machines,
+            constraints,
+            state,
+            simulation,
+            rng,
+            fake,
         )
 
         # Store PK pool and DataFrame for child tables
@@ -89,7 +101,15 @@ def generate_data(
 
         logger.info(f"Generating events for table: {event_table_name}")
         df = _generate_event_table(
-            table, event_config, entities, constraints, state, simulation, rng, fake, state_machines
+            table,
+            event_config,
+            entities,
+            constraints,
+            state,
+            simulation,
+            rng,
+            fake,
+            state_machines,
         )
 
         if df.is_empty():
@@ -128,7 +148,9 @@ def _apply_feature_correlations(df: pl.DataFrame, rng: random.Random) -> pl.Data
     risk_col = next((c for c in df.columns if "risk" in c.lower()), None)
 
     if segment_col and risk_col:
-        correlated_risk = [generate_risk_from_segment(seg, rng) for seg in df[segment_col].to_list()]
+        correlated_risk = [
+            generate_risk_from_segment(seg, rng) for seg in df[segment_col].to_list()
+        ]
         df = df.with_columns(pl.Series(risk_col, correlated_risk))
 
     return df
@@ -192,7 +214,13 @@ def _generate_entity_table(
 
         config_dist = field_configs.get(col_name)
         values = generate_column(
-            col, config_dist, count, rng, fake, sim_start, sim_end,
+            col,
+            config_dist,
+            count,
+            rng,
+            fake,
+            sim_start,
+            sim_end,
             anchor_series=temporal_anchor,
             parent_temporal=parent_temporal,
         )
@@ -255,7 +283,10 @@ def _get_parent_temporal_anchor(
                 parent_pk_col = fk["column"]
                 fk_values = columns[fk_col_name]
                 parent_lookup = dict(
-                    zip(parent_df[parent_pk_col].to_list(), parent_df[parent_col_name].to_list())
+                    zip(
+                        parent_df[parent_pk_col].to_list(),
+                        parent_df[parent_col_name].to_list(),
+                    )
                 )
                 return [parent_lookup.get(fk_val) for fk_val in fk_values]
     return None
@@ -343,7 +374,11 @@ def _apply_temporal_constraints(
 
         # Sort date values per row so they're in ascending order
         rows = df.select(present).to_pandas()
-        sorted_rows = rows.apply(lambda r: sorted(r, key=lambda x: (x is None, x)), axis=1, result_type="expand")
+        sorted_rows = rows.apply(
+            lambda r: sorted(r, key=lambda x: (x is None, x)),
+            axis=1,
+            result_type="expand",
+        )
         sorted_rows.columns = present
         for field in present:
             df = df.with_columns(pl.Series(field, sorted_rows[field].tolist()))
@@ -360,12 +395,19 @@ def _apply_nulls(
         col_name = col["name"]
         if col_name not in df.columns:
             continue
-        if not col.get("nullable", True) or col.get("primary_key") or col.get("foreign_key"):
+        if (
+            not col.get("nullable", True)
+            or col.get("primary_key")
+            or col.get("foreign_key")
+        ):
             continue
 
         mask = [rng.random() >= 0.05 for _ in range(count)]
         null_exprs.append(
-            pl.when(pl.Series(mask)).then(pl.col(col_name)).otherwise(None).alias(col_name)
+            pl.when(pl.Series(mask))
+            .then(pl.col(col_name))
+            .otherwise(None)
+            .alias(col_name)
         )
 
     if null_exprs:
@@ -411,12 +453,16 @@ def _generate_event_table(
 
     parent_df = state["table_dfs"].get(parent_table, pl.DataFrame())
     if parent_df.is_empty():
-        logger.warning(f"No parent data found for event table {table['name']} (emitted_by: {parent_table})")
+        logger.warning(
+            f"No parent data found for event table {table['name']} (emitted_by: {parent_table})"
+        )
         return pl.DataFrame()
 
     parent_pk_col = _find_parent_pk_col(table, parent_table)
     if not parent_pk_col:
-        logger.warning(f"No parent PK column found for event table {table['name']} (parent: {parent_table})")
+        logger.warning(
+            f"No parent PK column found for event table {table['name']} (parent: {parent_table})"
+        )
         return pl.DataFrame()
 
     parent_state_field = _find_state_field(parent_df)
@@ -426,24 +472,41 @@ def _generate_event_table(
     if parent_table in state_machines:
         terminal_states = state_machines[parent_table].get("terminal_states", [])
 
-    eligible = filter_eligible_parents(parent_df, parent_state_field, emit_when_states, terminal_states)
+    eligible = filter_eligible_parents(
+        parent_df, parent_state_field, emit_when_states, terminal_states
+    )
     if eligible.is_empty():
-        logger.info(f"  No eligible parents for {table['name']} (states: {emit_when_states})")
+        logger.info(
+            f"  No eligible parents for {table['name']} (states: {emit_when_states})"
+        )
         return pl.DataFrame()
 
     temporal_col = _find_temporal_col(eligible)
-    lambdas = calculate_lambdas_batch(lambda_base, lambda_modifiers, eligible, temporal_col)
+    lambdas = calculate_lambdas_batch(
+        lambda_base, lambda_modifiers, eligible, temporal_col
+    )
     event_counts = sample_event_counts_batch(lambdas, rng.randint(0, 2**31))
 
     total_events = int(event_counts.sum())
     if total_events == 0:
         return pl.DataFrame()
 
-    logger.info(f"  Emitting {total_events} events from {len(eligible)} eligible parents")
+    logger.info(
+        f"  Emitting {total_events} events from {len(eligible)} eligible parents"
+    )
 
     df = _build_event_dataframe(
-        table, eligible, parent_pk_col, parent_table,
-        event_counts, total_events, entities, state, simulation, rng, fake
+        table,
+        eligible,
+        parent_pk_col,
+        parent_table,
+        event_counts,
+        total_events,
+        entities,
+        state,
+        simulation,
+        rng,
+        fake,
     )
 
     # Enforce execution constraints (ExecutedQuantity ≤ OrderedQuantity)
@@ -494,7 +557,11 @@ def _apply_execution_constraints(
         col_lower = col.lower()
         if "ordered" in col_lower and "quantity" in col_lower:
             order_qty_col = col
-        elif "order" in col_lower and "quantity" in col_lower and "ordered" not in col_lower:
+        elif (
+            "order" in col_lower
+            and "quantity" in col_lower
+            and "ordered" not in col_lower
+        ):
             order_qty_col = col
 
     if not exec_qty_col or not order_qty_col:
@@ -512,17 +579,21 @@ def _apply_execution_constraints(
         return df
 
     # Join and cap
-    df = df.join(
-        parent_df.select([parent_pk_col, order_qty_col]),
-        left_on=parent_fk_col,
-        right_on=parent_pk_col,
-        how="left"
-    ).with_columns(
-        pl.when(pl.col(exec_qty_col) > pl.col(order_qty_col))
-        .then(pl.col(order_qty_col))
-        .otherwise(pl.col(exec_qty_col))
-        .alias(exec_qty_col)
-    ).drop(order_qty_col)
+    df = (
+        df.join(
+            parent_df.select([parent_pk_col, order_qty_col]),
+            left_on=parent_fk_col,
+            right_on=parent_pk_col,
+            how="left",
+        )
+        .with_columns(
+            pl.when(pl.col(exec_qty_col) > pl.col(order_qty_col))
+            .then(pl.col(order_qty_col))
+            .otherwise(pl.col(exec_qty_col))
+            .alias(exec_qty_col)
+        )
+        .drop(order_qty_col)
+    )
 
     return df
 
@@ -538,9 +609,43 @@ def _find_parent_pk_col(table: dict, parent_table: str) -> str | None:
 
 def _find_state_field(df: pl.DataFrame) -> str | None:
     """Find a status/state field in a DataFrame by column name heuristics."""
+    col_names = [c.lower() for c in df.columns]
+
+    location_hints = [
+        "address",
+        "billing",
+        "shipping",
+        "mailing",
+        "residence",
+        "location",
+        "city",
+        "country",
+        "postal",
+        "zip",
+        "province",
+    ]
+
+    def is_geographic_state_column(name: str) -> bool:
+        if "state" not in name:
+            return False
+        if any(hint in name for hint in location_hints):
+            return True
+        has_location_context = any(
+            any(hint in candidate for hint in location_hints) for candidate in col_names
+        )
+        if name == "state" and has_location_context:
+            return True
+        if name.endswith("_state_code") or name.endswith("_state_abbr"):
+            return True
+        return False
+
     for col_name in df.columns:
         lower = col_name.lower()
-        if ("status" in lower or "state" in lower) and "employment" not in lower and "marital" not in lower:
+        if "employment" in lower or "marital" in lower:
+            continue
+        if is_geographic_state_column(lower):
+            continue
+        if "status" in lower or "state" in lower:
             return col_name
     return None
 
@@ -582,9 +687,16 @@ def _build_event_dataframe(
     parent_temporal_lookup: dict = {}
     if parent_temporal_col and parent_pk_col:
         parent_temporal_lookup = dict(
-            zip(eligible[parent_pk_col].to_list(), eligible[parent_temporal_col].to_list())
+            zip(
+                eligible[parent_pk_col].to_list(),
+                eligible[parent_temporal_col].to_list(),
+            )
         )
-    parent_temporal_anchor = [parent_temporal_lookup.get(pk) for pk in repeated_parent_pks] if parent_temporal_lookup else None
+    parent_temporal_anchor = (
+        [parent_temporal_lookup.get(pk) for pk in repeated_parent_pks]
+        if parent_temporal_lookup
+        else None
+    )
 
     columns: dict[str, list] = {}
     within_row_temporal_anchor: list | None = None
@@ -608,7 +720,13 @@ def _build_event_dataframe(
         else:
             config_dist = field_configs.get(col_name)
             values = generate_column(
-                col, config_dist, total_events, rng, fake, sim_start, sim_end,
+                col,
+                config_dist,
+                total_events,
+                rng,
+                fake,
+                sim_start,
+                sim_end,
                 anchor_series=within_row_temporal_anchor,
                 parent_temporal=parent_temporal_anchor,
             )
@@ -715,24 +833,30 @@ def _apply_lifecycle_triggers(
             dormancy_threshold = max_date - timedelta(days=90)
             updated = updated.with_columns(
                 pl.when(
-                    (pl.col(temporal_col) < dormancy_threshold) &
-                    (pl.col(state_field) == "Active")
-                ).then(pl.lit("Dormant"))
+                    (pl.col(temporal_col) < dormancy_threshold)
+                    & (pl.col(state_field) == "Active")
+                )
+                .then(pl.lit("Dormant"))
                 .otherwise(pl.col(state_field))
                 .alias(state_field)
             )
 
         # Delinquency trigger: payment overdue (Credit Risk scenarios)
         if "Current" in parent_df[state_field].unique().to_list():
-            due_date_col = _find_column_by_pattern(parent_df, ["due_date", "scheduled_date", "payment_date"])
-            days_past_due_col = _find_column_by_pattern(parent_df, ["days_past_due", "dpd"])
+            due_date_col = _find_column_by_pattern(
+                parent_df, ["due_date", "scheduled_date", "payment_date"]
+            )
+            days_past_due_col = _find_column_by_pattern(
+                parent_df, ["days_past_due", "dpd"]
+            )
 
             if due_date_col and days_past_due_col:
                 updated = updated.with_columns(
                     pl.when(
-                        (pl.col(due_date_col) < max_date) &
-                        (pl.col(state_field) == "Current")
-                    ).then(pl.lit("Delinquent"))
+                        (pl.col(due_date_col) < max_date)
+                        & (pl.col(state_field) == "Current")
+                    )
+                    .then(pl.lit("Delinquent"))
                     .otherwise(pl.col(state_field))
                     .alias(state_field)
                 )
@@ -742,9 +866,10 @@ def _apply_lifecycle_triggers(
             default_threshold = max_date - timedelta(days=90)
             updated = updated.with_columns(
                 pl.when(
-                    (pl.col(temporal_col) < default_threshold) &
-                    (pl.col(state_field) == "Delinquent")
-                ).then(pl.lit("Default"))
+                    (pl.col(temporal_col) < default_threshold)
+                    & (pl.col(state_field) == "Delinquent")
+                )
+                .then(pl.lit("Default"))
                 .otherwise(pl.col(state_field))
                 .alias(state_field)
             )
@@ -754,9 +879,10 @@ def _apply_lifecycle_triggers(
             chargeoff_threshold = max_date - timedelta(days=180)
             updated = updated.with_columns(
                 pl.when(
-                    (pl.col(temporal_col) < chargeoff_threshold) &
-                    (pl.col(state_field) == "Default")
-                ).then(pl.lit("Charged-off"))
+                    (pl.col(temporal_col) < chargeoff_threshold)
+                    & (pl.col(state_field) == "Default")
+                )
+                .then(pl.lit("Charged-off"))
                 .otherwise(pl.col(state_field))
                 .alias(state_field)
             )
@@ -834,7 +960,9 @@ def _update_parent_balance(
     type_col = None
     for col in event_df.columns:
         col_lower = col.lower()
-        if "transaction" in col_lower and ("type" in col_lower or "category" in col_lower):
+        if "transaction" in col_lower and (
+            "type" in col_lower or "category" in col_lower
+        ):
             type_col = col
             break
 
@@ -844,7 +972,9 @@ def _update_parent_balance(
         first_type = event_df[type_col][0]
         if first_type and isinstance(first_type, str):
             type_lower = first_type.lower()
-            if any(x in type_lower for x in ["debit", "withdrawal", "payment", "repayment"]):
+            if any(
+                x in type_lower for x in ["debit", "withdrawal", "payment", "repayment"]
+            ):
                 sign = -1
     else:
         # Fallback to table name heuristic
@@ -858,11 +988,17 @@ def _update_parent_balance(
     )
 
     # Update parent balance using the sign calculated above
-    updated_parent = parent_df.join(
-        balance_changes, left_on=parent_pk_col, right_on=parent_fk_col, how="left"
-    ).with_columns(
-        (pl.col(balance_col) + sign * pl.col("total_amount").fill_null(0)).alias(balance_col)
-    ).drop("total_amount")
+    updated_parent = (
+        parent_df.join(
+            balance_changes, left_on=parent_pk_col, right_on=parent_fk_col, how="left"
+        )
+        .with_columns(
+            (pl.col(balance_col) + sign * pl.col("total_amount").fill_null(0)).alias(
+                balance_col
+            )
+        )
+        .drop("total_amount")
+    )
 
     state["table_dfs"][parent_table_name] = updated_parent
 

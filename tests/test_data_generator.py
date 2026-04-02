@@ -6,7 +6,11 @@ from datetime import datetime
 import polars as pl
 from faker import Faker
 
-from gen_data.data_generator import _generate_entity_table, _generate_event_table
+from gen_data.data_generator import (
+    _find_state_field,
+    _generate_entity_table,
+    _generate_event_table,
+)
 
 
 def test_generate_entity_table():
@@ -19,10 +23,15 @@ def test_generate_entity_table():
     parent_table = {
         "name": "customers",
         "columns": [
-            {"name": "customer_id", "type": "integer", "primary_key": True, "field_role": "identifier"},
+            {
+                "name": "customer_id",
+                "type": "integer",
+                "primary_key": True,
+                "field_role": "identifier",
+            },
             {"name": "name", "type": "text", "field_role": "text"},
             {"name": "created_at", "type": "date", "field_role": "temporal"},
-        ]
+        ],
     }
 
     state = {"pk_values": {}, "table_dfs": {}}
@@ -52,11 +61,20 @@ def test_generate_entity_table():
     child_table = {
         "name": "accounts",
         "columns": [
-            {"name": "account_id", "type": "integer", "primary_key": True, "field_role": "identifier"},
-            {"name": "customer_id", "type": "integer", "foreign_key": {"table": "customers", "column": "customer_id"}},
+            {
+                "name": "account_id",
+                "type": "integer",
+                "primary_key": True,
+                "field_role": "identifier",
+            },
+            {
+                "name": "customer_id",
+                "type": "integer",
+                "foreign_key": {"table": "customers", "column": "customer_id"},
+            },
             {"name": "balance", "type": "decimal", "field_role": "numerical"},
             {"name": "opened_at", "type": "date", "field_role": "temporal"},
-        ]
+        ],
     }
 
     # Generate child
@@ -78,7 +96,10 @@ def test_generate_entity_table():
 
     assert len(parent_df) == 3
     assert len(child_df) == 5
-    assert all(cid in state["pk_values"]["customers"] for cid in child_df["customer_id"].to_list())
+    assert all(
+        cid in state["pk_values"]["customers"]
+        for cid in child_df["customer_id"].to_list()
+    )
 
 
 def test_generate_event_table():
@@ -88,11 +109,17 @@ def test_generate_event_table():
     fake.seed_instance(42)
 
     # Parent entity with status
-    parent_df = pl.DataFrame({
-        "account_id": [1, 2, 3],
-        "status": ["active", "active", "closed"],
-        "opened_at": [datetime(2024, 1, 1), datetime(2024, 2, 1), datetime(2024, 3, 1)],
-    })
+    parent_df = pl.DataFrame(
+        {
+            "account_id": [1, 2, 3],
+            "status": ["active", "active", "closed"],
+            "opened_at": [
+                datetime(2024, 1, 1),
+                datetime(2024, 2, 1),
+                datetime(2024, 3, 1),
+            ],
+        }
+    )
 
     state = {
         "pk_values": {"accounts": [1, 2, 3]},
@@ -103,11 +130,20 @@ def test_generate_event_table():
     event_table = {
         "name": "transactions",
         "columns": [
-            {"name": "transaction_id", "type": "integer", "primary_key": True, "field_role": "identifier"},
-            {"name": "account_id", "type": "integer", "foreign_key": {"table": "accounts", "column": "account_id"}},
+            {
+                "name": "transaction_id",
+                "type": "integer",
+                "primary_key": True,
+                "field_role": "identifier",
+            },
+            {
+                "name": "account_id",
+                "type": "integer",
+                "foreign_key": {"table": "accounts", "column": "account_id"},
+            },
             {"name": "amount", "type": "decimal", "field_role": "numerical"},
             {"name": "transaction_date", "type": "date", "field_role": "temporal"},
-        ]
+        ],
     }
 
     # Event config
@@ -117,7 +153,7 @@ def test_generate_event_table():
         "frequency": {
             "lambda_base": 2.0,
             "lambda_modifiers": [],
-        }
+        },
     }
 
     # Generate events
@@ -143,3 +179,29 @@ def test_generate_event_table():
     # Only active accounts should emit events
     assert all(aid in [1, 2] for aid in event_df["account_id"].to_list())
     assert 3 not in event_df["account_id"].to_list()
+
+
+def test_find_state_field_ignores_geographic_state():
+    """Geographic state columns should not be treated as lifecycle state fields."""
+    df = pl.DataFrame(
+        {
+            "customer_id": [1, 2],
+            "state": ["California", "Texas"],
+            "country": ["US", "US"],
+        }
+    )
+
+    assert _find_state_field(df) is None
+
+
+def test_find_state_field_detects_status_columns():
+    """Lifecycle status columns should still be detected."""
+    df = pl.DataFrame(
+        {
+            "account_id": [1, 2],
+            "account_status": ["Active", "Closed"],
+            "address_state": ["California", "Texas"],
+        }
+    )
+
+    assert _find_state_field(df) == "account_status"

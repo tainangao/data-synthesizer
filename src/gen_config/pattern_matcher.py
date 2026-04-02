@@ -19,26 +19,87 @@ def detect_scenario(schema: dict) -> str:
     tables = {t["name"].lower() for t in schema["tables"]}
 
     # Check for loan/credit patterns (partial match)
-    if any(x in name for name in tables for x in ["loan", "credit", "repayment", "delinquenc"]):
+    if any(
+        x in name
+        for name in tables
+        for x in ["loan", "credit", "repayment", "delinquenc"]
+    ):
         return "credit_risk"
 
     # Check for trading patterns (partial match)
-    if any(x in name for name in tables for x in ["order", "trade", "execution", "settlement", "portfolio"]):
+    if any(
+        x in name
+        for name in tables
+        for x in ["order", "trade", "execution", "settlement", "portfolio"]
+    ):
         return "trading"
 
     # Default to CRM
     return "crm"
 
 
+def _is_geographic_state_field(field_name: str, all_field_names: list[str]) -> bool:
+    """Return True when a state-like field likely represents a location."""
+    if "state" not in field_name:
+        return False
+
+    location_hints = [
+        "address",
+        "billing",
+        "shipping",
+        "mailing",
+        "residence",
+        "location",
+        "city",
+        "country",
+        "postal",
+        "zip",
+        "province",
+    ]
+
+    if any(hint in field_name for hint in location_hints):
+        return True
+
+    has_location_context = any(
+        any(hint in candidate for hint in location_hints)
+        for candidate in all_field_names
+    )
+    if field_name == "state" and has_location_context:
+        return True
+
+    if field_name.endswith("_state_code") or field_name.endswith("_state_abbr"):
+        return True
+
+    return False
+
+
 def find_status_field(table: dict) -> str | None:
     """Find status/state field in table."""
     columns = table.get("columns", table.get("fields", []))
+    all_names = [c["name"].lower() for c in columns]
+
+    # Prefer explicit status columns first
     for col in columns:
         name = col["name"].lower()
-        # Match exact patterns: status, state, or *_status/*_state
-        if name == "status" or name == "state" or name.endswith("_status") or name.endswith("_state"):
-            # Exclude employment_status, marital_status, etc.
-            if name not in ["employment_status", "marital_status", "relationship_status"]:
+        if name == "status" or name.endswith("_status"):
+            if name not in [
+                "employment_status",
+                "marital_status",
+                "relationship_status",
+            ]:
+                return col["name"]
+
+    # Fallback to *_state fields only when they are not geographic
+    for col in columns:
+        name = col["name"].lower()
+        if name == "state" or name.endswith("_state"):
+            if _is_geographic_state_field(name, all_names):
+                continue
+            if name not in [
+                "employment_status",
+                "marital_status",
+                "relationship_status",
+            ]:
                 return col["name"]
     return None
 
@@ -72,8 +133,23 @@ def detect_event_tables(schema: dict, entity_table: str) -> list[str]:
     """Detect event tables by name patterns."""
     # These are event/fact table prefixes — must match a word segment, not a substring
     # e.g. "TradeExecutions" matches "execution", not "trade" (which would match "Traders")
-    event_patterns = ["transaction", "interaction", "payment", "repayment", "execution", "settlement", "history"]
-    entity_patterns = ["trader", "customer", "instrument", "portfolio", "borrower", "account"]
+    event_patterns = [
+        "transaction",
+        "interaction",
+        "payment",
+        "repayment",
+        "execution",
+        "settlement",
+        "history",
+    ]
+    entity_patterns = [
+        "trader",
+        "customer",
+        "instrument",
+        "portfolio",
+        "borrower",
+        "account",
+    ]
     event_tables = []
 
     for table in schema["tables"]:
@@ -125,22 +201,22 @@ def build_adjustments(table: dict, scenario: str) -> list[dict]:
     for field in numericals[:2]:  # Limit to 2 most relevant
         field_lower = field.lower()
         if any(x in field_lower for x in ["score", "income", "balance", "amount"]):
-            adjustments.append({
-                "field": field,
-                "direction": "higher_increases",
-                "strength": "moderate"
-            })
+            adjustments.append(
+                {
+                    "field": field,
+                    "direction": "higher_increases",
+                    "strength": "moderate",
+                }
+            )
 
     # Add categorical field adjustments (e.g., segment, risk_level)
     categoricals = find_categorical_fields(table)
     for field in categoricals[:1]:  # Limit to 1
         field_lower = field.lower()
         if any(x in field_lower for x in ["segment", "type", "category", "risk"]):
-            adjustments.append({
-                "field": field,
-                "direction": "higher_increases",
-                "strength": "weak"
-            })
+            adjustments.append(
+                {"field": field, "direction": "higher_increases", "strength": "weak"}
+            )
 
     return adjustments
 
@@ -153,21 +229,28 @@ def build_lambda_modifiers(table: dict) -> list[dict]:
     numericals = find_numerical_fields(table)
     for field in numericals[:2]:  # Top 2
         field_lower = field.lower()
-        if any(x in field_lower for x in ["income", "balance", "score", "value", "amount", "principal", "rate"]):
-            modifiers.append({
-                "field": field,
-                "effect": "higher_increases"
-            })
+        if any(
+            x in field_lower
+            for x in [
+                "income",
+                "balance",
+                "score",
+                "value",
+                "amount",
+                "principal",
+                "rate",
+            ]
+        ):
+            modifiers.append({"field": field, "effect": "higher_increases"})
 
     # Add categorical modifiers
     categoricals = find_categorical_fields(table)
     for field in categoricals[:1]:
         field_lower = field.lower()
-        if any(x in field_lower for x in ["segment", "type", "tier", "category", "risk"]):
-            modifiers.append({
-                "field": field,
-                "effect": "higher_increases"
-            })
+        if any(
+            x in field_lower for x in ["segment", "type", "tier", "category", "risk"]
+        ):
+            modifiers.append({"field": field, "effect": "higher_increases"})
 
     return modifiers
 
@@ -199,42 +282,80 @@ def build_crm_config(schema: dict) -> dict:
                 for from_state, to_states in sm["transitions"].items():
                     transitions_list[from_state] = []
                     for to_state, config in to_states.items():
-                        transitions_list[from_state].append({
-                            "to_state": to_state,
-                            "base_prob": config["base_prob"],
-                            "adjustments": config.get("adjustments", [])
-                        })
-                state_machines.append({
-                    "entity": table_name,
-                    "state_field": status_field,
-                    "initial_state": sm["initial_state"],
-                    "terminal_states": ["Closed", "Rejected"],
-                    "transitions": transitions_list
-                })
+                        transitions_list[from_state].append(
+                            {
+                                "to_state": to_state,
+                                "base_prob": config["base_prob"],
+                                "adjustments": config.get("adjustments", []),
+                            }
+                        )
+                state_machines.append(
+                    {
+                        "entity": table_name,
+                        "state_field": status_field,
+                        "initial_state": sm["initial_state"],
+                        "terminal_states": ["Closed", "Rejected"],
+                        "transitions": transitions_list,
+                    }
+                )
             else:
                 adjustments = build_adjustments(table, "crm")
-                state_machines.append({
-                    "entity": table_name,
-                    "state_field": status_field,
-                    "initial_state": "Pending",
-                    "terminal_states": ["Closed"],
-                    "transitions": {
-                        "Pending": [
-                            {"to_state": "Active", "base_prob": 0.85, "adjustments": adjustments},
-                            {"to_state": "Closed", "base_prob": 0.15, "adjustments": []}
-                        ],
-                        "Active": [
-                            {"to_state": "Active", "base_prob": 0.85, "adjustments": []},
-                            {"to_state": "Dormant", "base_prob": 0.14, "adjustments": adjustments},
-                            {"to_state": "Closed", "base_prob": 0.01, "adjustments": []}
-                        ],
-                        "Dormant": [
-                            {"to_state": "Active", "base_prob": 0.1, "adjustments": []},
-                            {"to_state": "Dormant", "base_prob": 0.8, "adjustments": []},
-                            {"to_state": "Closed", "base_prob": 0.1, "adjustments": adjustments}
-                        ]
+                state_machines.append(
+                    {
+                        "entity": table_name,
+                        "state_field": status_field,
+                        "initial_state": "Pending",
+                        "terminal_states": ["Closed"],
+                        "transitions": {
+                            "Pending": [
+                                {
+                                    "to_state": "Active",
+                                    "base_prob": 0.85,
+                                    "adjustments": adjustments,
+                                },
+                                {
+                                    "to_state": "Closed",
+                                    "base_prob": 0.15,
+                                    "adjustments": [],
+                                },
+                            ],
+                            "Active": [
+                                {
+                                    "to_state": "Active",
+                                    "base_prob": 0.85,
+                                    "adjustments": [],
+                                },
+                                {
+                                    "to_state": "Dormant",
+                                    "base_prob": 0.14,
+                                    "adjustments": adjustments,
+                                },
+                                {
+                                    "to_state": "Closed",
+                                    "base_prob": 0.01,
+                                    "adjustments": [],
+                                },
+                            ],
+                            "Dormant": [
+                                {
+                                    "to_state": "Active",
+                                    "base_prob": 0.1,
+                                    "adjustments": [],
+                                },
+                                {
+                                    "to_state": "Dormant",
+                                    "base_prob": 0.8,
+                                    "adjustments": [],
+                                },
+                                {
+                                    "to_state": "Closed",
+                                    "base_prob": 0.1,
+                                    "adjustments": adjustments,
+                                },
+                            ],
+                        },
                     }
-                })
+                )
             break
 
     # Find event tables
@@ -246,24 +367,30 @@ def build_crm_config(schema: dict) -> dict:
         if event_config and "event" in event_config:
             for event_table in event_tables:
                 evt = event_config["event"].copy()
-                events.append({
-                    "event_table": event_table,
-                    "emitted_by": entity_table,
-                    "emit_when_states": evt.get("emit_when_states", ["Active"]),
-                    "lambda_base": evt["frequency"]["lambda_base"],
-                    "lambda_modifiers": evt["frequency"].get("lambda_modifiers", [])
-                })
+                events.append(
+                    {
+                        "event_table": event_table,
+                        "emitted_by": entity_table,
+                        "emit_when_states": evt.get("emit_when_states", ["Active"]),
+                        "lambda_base": evt["frequency"]["lambda_base"],
+                        "lambda_modifiers": evt["frequency"].get(
+                            "lambda_modifiers", []
+                        ),
+                    }
+                )
         else:
             entity_table_obj = tables[entity_table]
             modifiers = build_lambda_modifiers(entity_table_obj)
             for event_table in event_tables:
-                events.append({
-                    "event_table": event_table,
-                    "emitted_by": entity_table,
-                    "emit_when_states": ["Active"],
-                    "lambda_base": 5.0,
-                    "lambda_modifiers": modifiers
-                })
+                events.append(
+                    {
+                        "event_table": event_table,
+                        "emitted_by": entity_table,
+                        "emit_when_states": ["Active"],
+                        "lambda_base": 5.0,
+                        "lambda_modifiers": modifiers,
+                    }
+                )
 
     # Add key distributions from schema fields
     for table_name, table in tables.items():
@@ -279,15 +406,18 @@ def build_crm_config(schema: dict) -> dict:
                 field_lower = field.lower()
                 if "age" in field_lower:
                     key_distributions[table_name][field] = {
-                        "distribution": "normal", "params": {"mean": 35, "std": 12}
+                        "distribution": "normal",
+                        "params": {"mean": 35, "std": 12},
                     }
                 elif "income" in field_lower or "salary" in field_lower:
                     key_distributions[table_name][field] = {
-                        "distribution": "lognormal", "params": {"mean": 60000, "sigma": 0.5}
+                        "distribution": "lognormal",
+                        "params": {"mean": 60000, "sigma": 0.5},
                     }
                 elif "balance" in field_lower or "amount" in field_lower:
                     key_distributions[table_name][field] = {
-                        "distribution": "lognormal", "params": {"mean": 5000, "sigma": 0.8}
+                        "distribution": "lognormal",
+                        "params": {"mean": 5000, "sigma": 0.8},
                     }
 
             # Add categorical distributions
@@ -296,28 +426,25 @@ def build_crm_config(schema: dict) -> dict:
                 if "segment" in field_lower:
                     key_distributions[table_name][field] = {
                         "distribution": "categorical",
-                        "params": {"categories": ["Mass", "Affluent", "SME"]}
+                        "params": {"categories": ["Mass", "Affluent", "SME"]},
                     }
                 elif "type" in field_lower:
                     key_distributions[table_name][field] = {
                         "distribution": "categorical",
-                        "params": {"categories": ["Standard", "Premium", "Enterprise"]}
+                        "params": {"categories": ["Standard", "Premium", "Enterprise"]},
                     }
 
     # Date constraints
     for table in tables.values():
         dates = find_date_fields(table)
         if len(dates) >= 2:
-            constraints.append({
-                "type": "temporal_order",
-                "params": {"fields": dates}
-            })
+            constraints.append({"type": "temporal_order", "params": {"fields": dates}})
 
     return {
         "state_machines": state_machines,
         "events": events,
         "constraints": constraints,
-        "key_distributions": key_distributions
+        "key_distributions": key_distributions,
     }
 
 
@@ -340,18 +467,28 @@ def build_credit_config(schema: dict) -> dict:
 
                 # Use appropriate states based on table type
                 if "application" in table_name.lower():
-                    state_machines.append({
-                        "entity": table_name,
-                        "state_field": status_field,
-                        "initial_state": "Pending",
-                        "terminal_states": ["Approved", "Rejected"],
-                        "transitions": {
-                            "Pending": [
-                                {"to_state": "Approved", "base_prob": 0.7, "adjustments": adjustments},
-                                {"to_state": "Rejected", "base_prob": 0.3, "adjustments": adjustments}
-                            ]
+                    state_machines.append(
+                        {
+                            "entity": table_name,
+                            "state_field": status_field,
+                            "initial_state": "Pending",
+                            "terminal_states": ["Approved", "Rejected"],
+                            "transitions": {
+                                "Pending": [
+                                    {
+                                        "to_state": "Approved",
+                                        "base_prob": 0.7,
+                                        "adjustments": adjustments,
+                                    },
+                                    {
+                                        "to_state": "Rejected",
+                                        "base_prob": 0.3,
+                                        "adjustments": adjustments,
+                                    },
+                                ]
+                            },
                         }
-                    })
+                    )
                 else:
                     # Loans table with full lifecycle
                     loan_table = table_name
@@ -365,44 +502,94 @@ def build_credit_config(schema: dict) -> dict:
                         for from_state, to_states in sm["transitions"].items():
                             transitions_list[from_state] = []
                             for to_state, config in to_states.items():
-                                transitions_list[from_state].append({
-                                    "to_state": to_state,
-                                    "base_prob": config["base_prob"],
-                                    "adjustments": config.get("adjustments", [])
-                                })
-                        state_machines.append({
-                            "entity": table_name,
-                            "state_field": status_field,
-                            "initial_state": sm["initial_state"],
-                            "terminal_states": ["Paid in Full", "Charged-off"],
-                            "transitions": transitions_list
-                        })
+                                transitions_list[from_state].append(
+                                    {
+                                        "to_state": to_state,
+                                        "base_prob": config["base_prob"],
+                                        "adjustments": config.get("adjustments", []),
+                                    }
+                                )
+                        state_machines.append(
+                            {
+                                "entity": table_name,
+                                "state_field": status_field,
+                                "initial_state": sm["initial_state"],
+                                "terminal_states": ["Paid in Full", "Charged-off"],
+                                "transitions": transitions_list,
+                            }
+                        )
                     else:
-                        state_machines.append({
-                            "entity": table_name,
-                            "state_field": status_field,
-                            "initial_state": "Current",
-                            "terminal_states": ["Paid in Full", "Charged-off"],
-                            "transitions": {
-                            "Current": [
-                                {"to_state": "Current", "base_prob": 0.94, "adjustments": []},
-                                {"to_state": "Delinquent", "base_prob": 0.03, "adjustments": adjustments},
-                                {"to_state": "Paid in Full", "base_prob": 0.03, "adjustments": []}
-                            ],
-                            "Delinquent": [
-                                {"to_state": "Current", "base_prob": 0.2, "adjustments": []},
-                                {"to_state": "Delinquent", "base_prob": 0.6, "adjustments": []},
-                                {"to_state": "Default", "base_prob": 0.15, "adjustments": adjustments},
-                                {"to_state": "Paid in Full", "base_prob": 0.05, "adjustments": []}
-                            ],
-                            "Default": [
-                                {"to_state": "Current", "base_prob": 0.05, "adjustments": []},
-                                {"to_state": "Delinquent", "base_prob": 0.1, "adjustments": []},
-                                {"to_state": "Default", "base_prob": 0.7, "adjustments": []},
-                                {"to_state": "Charged-off", "base_prob": 0.15, "adjustments": adjustments}
-                            ]
-                        }
-                    })
+                        state_machines.append(
+                            {
+                                "entity": table_name,
+                                "state_field": status_field,
+                                "initial_state": "Current",
+                                "terminal_states": ["Paid in Full", "Charged-off"],
+                                "transitions": {
+                                    "Current": [
+                                        {
+                                            "to_state": "Current",
+                                            "base_prob": 0.94,
+                                            "adjustments": [],
+                                        },
+                                        {
+                                            "to_state": "Delinquent",
+                                            "base_prob": 0.03,
+                                            "adjustments": adjustments,
+                                        },
+                                        {
+                                            "to_state": "Paid in Full",
+                                            "base_prob": 0.03,
+                                            "adjustments": [],
+                                        },
+                                    ],
+                                    "Delinquent": [
+                                        {
+                                            "to_state": "Current",
+                                            "base_prob": 0.2,
+                                            "adjustments": [],
+                                        },
+                                        {
+                                            "to_state": "Delinquent",
+                                            "base_prob": 0.6,
+                                            "adjustments": [],
+                                        },
+                                        {
+                                            "to_state": "Default",
+                                            "base_prob": 0.15,
+                                            "adjustments": adjustments,
+                                        },
+                                        {
+                                            "to_state": "Paid in Full",
+                                            "base_prob": 0.05,
+                                            "adjustments": [],
+                                        },
+                                    ],
+                                    "Default": [
+                                        {
+                                            "to_state": "Current",
+                                            "base_prob": 0.05,
+                                            "adjustments": [],
+                                        },
+                                        {
+                                            "to_state": "Delinquent",
+                                            "base_prob": 0.1,
+                                            "adjustments": [],
+                                        },
+                                        {
+                                            "to_state": "Default",
+                                            "base_prob": 0.7,
+                                            "adjustments": [],
+                                        },
+                                        {
+                                            "to_state": "Charged-off",
+                                            "base_prob": 0.15,
+                                            "adjustments": adjustments,
+                                        },
+                                    ],
+                                },
+                            }
+                        )
 
     # Find payment/repayment event tables
     if loan_table:
@@ -413,24 +600,32 @@ def build_credit_config(schema: dict) -> dict:
         if event_config and "event" in event_config:
             for event_table in event_tables:
                 evt = event_config["event"].copy()
-                events.append({
-                    "event_table": event_table,
-                    "emitted_by": loan_table,
-                    "emit_when_states": evt.get("emit_when_states", ["Current", "Delinquent"]),
-                    "lambda_base": evt["frequency"]["lambda_base"],
-                    "lambda_modifiers": evt["frequency"].get("lambda_modifiers", [])
-                })
+                events.append(
+                    {
+                        "event_table": event_table,
+                        "emitted_by": loan_table,
+                        "emit_when_states": evt.get(
+                            "emit_when_states", ["Current", "Delinquent"]
+                        ),
+                        "lambda_base": evt["frequency"]["lambda_base"],
+                        "lambda_modifiers": evt["frequency"].get(
+                            "lambda_modifiers", []
+                        ),
+                    }
+                )
         else:
             loan_table_obj = tables[loan_table]
             modifiers = build_lambda_modifiers(loan_table_obj)
             for event_table in event_tables:
-                events.append({
-                    "event_table": event_table,
-                    "emitted_by": loan_table,
-                    "emit_when_states": ["Current", "Delinquent"],
-                    "lambda_base": 1.0,
-                    "lambda_modifiers": modifiers
-                })
+                events.append(
+                    {
+                        "event_table": event_table,
+                        "emitted_by": loan_table,
+                        "emit_when_states": ["Current", "Delinquent"],
+                        "lambda_base": 1.0,
+                        "lambda_modifiers": modifiers,
+                    }
+                )
 
     # Add key distributions from schema fields
     for table_name, table in tables.items():
@@ -446,15 +641,23 @@ def build_credit_config(schema: dict) -> dict:
                 field_lower = field.lower()
                 if "score" in field_lower:
                     key_distributions[table_name][field] = {
-                        "distribution": "normal", "params": {"mean": 650, "std": 100}
+                        "distribution": "normal",
+                        "params": {"mean": 650, "std": 100},
+                    }
+                elif "debt_to_income" in field_lower or field_lower.endswith("_ratio"):
+                    key_distributions[table_name][field] = {
+                        "distribution": "normal",
+                        "params": {"mean": 0.35, "std": 0.12},
                     }
                 elif "income" in field_lower:
                     key_distributions[table_name][field] = {
-                        "distribution": "lognormal", "params": {"mean": 60000, "sigma": 0.5}
+                        "distribution": "lognormal",
+                        "params": {"mean": 60000, "sigma": 0.5},
                     }
                 elif "amount" in field_lower or "principal" in field_lower:
                     key_distributions[table_name][field] = {
-                        "distribution": "lognormal", "params": {"mean": 25000, "sigma": 0.6}
+                        "distribution": "lognormal",
+                        "params": {"mean": 25000, "sigma": 0.6},
                     }
 
             # Add categorical distributions
@@ -463,28 +666,25 @@ def build_credit_config(schema: dict) -> dict:
                 if "segment" in field_lower:
                     key_distributions[table_name][field] = {
                         "distribution": "categorical",
-                        "params": {"categories": ["Prime", "Near-Prime", "Subprime"]}
+                        "params": {"categories": ["Prime", "Near-Prime", "Subprime"]},
                     }
                 elif "risk" in field_lower:
                     key_distributions[table_name][field] = {
                         "distribution": "categorical",
-                        "params": {"categories": ["Low", "Medium", "High"]}
+                        "params": {"categories": ["Low", "Medium", "High"]},
                     }
 
     # Date constraints
     for table in tables.values():
         dates = find_date_fields(table)
         if len(dates) >= 2:
-            constraints.append({
-                "type": "temporal_order",
-                "params": {"fields": dates}
-            })
+            constraints.append({"type": "temporal_order", "params": {"fields": dates}})
 
     return {
         "state_machines": state_machines,
         "events": events,
         "constraints": constraints,
-        "key_distributions": key_distributions
+        "key_distributions": key_distributions,
     }
 
 
@@ -514,39 +714,73 @@ def build_trading_config(schema: dict) -> dict:
                     for from_state, to_states in sm["transitions"].items():
                         transitions_list[from_state] = []
                         for to_state, config in to_states.items():
-                            transitions_list[from_state].append({
-                                "to_state": to_state,
-                                "base_prob": config["base_prob"],
-                                "adjustments": config.get("adjustments", [])
-                            })
-                    state_machines.append({
-                        "entity": table_name,
-                        "state_field": status_field,
-                        "initial_state": sm["initial_state"],
-                        "terminal_states": ["Filled", "Cancelled"],
-                        "transitions": transitions_list
-                    })
+                            transitions_list[from_state].append(
+                                {
+                                    "to_state": to_state,
+                                    "base_prob": config["base_prob"],
+                                    "adjustments": config.get("adjustments", []),
+                                }
+                            )
+                    state_machines.append(
+                        {
+                            "entity": table_name,
+                            "state_field": status_field,
+                            "initial_state": sm["initial_state"],
+                            "terminal_states": ["Filled", "Cancelled"],
+                            "transitions": transitions_list,
+                        }
+                    )
                 else:
                     adjustments = build_adjustments(table, "trading")
-                    state_machines.append({
-                        "entity": table_name,
-                        "state_field": status_field,
-                        "initial_state": "Open",
-                        "terminal_states": ["Filled", "Cancelled"],
-                        "transitions": {
-                        "Open": [
-                            {"to_state": "Open", "base_prob": 0.4, "adjustments": []},
-                            {"to_state": "Partial Fill", "base_prob": 0.2, "adjustments": adjustments},
-                            {"to_state": "Filled", "base_prob": 0.3, "adjustments": adjustments},
-                            {"to_state": "Cancelled", "base_prob": 0.1, "adjustments": []}
-                        ],
-                        "Partial Fill": [
-                            {"to_state": "Partial Fill", "base_prob": 0.3, "adjustments": []},
-                            {"to_state": "Filled", "base_prob": 0.6, "adjustments": adjustments},
-                            {"to_state": "Cancelled", "base_prob": 0.1, "adjustments": []}
-                        ]
-                    }
-                })
+                    state_machines.append(
+                        {
+                            "entity": table_name,
+                            "state_field": status_field,
+                            "initial_state": "Open",
+                            "terminal_states": ["Filled", "Cancelled"],
+                            "transitions": {
+                                "Open": [
+                                    {
+                                        "to_state": "Open",
+                                        "base_prob": 0.4,
+                                        "adjustments": [],
+                                    },
+                                    {
+                                        "to_state": "Partial Fill",
+                                        "base_prob": 0.2,
+                                        "adjustments": adjustments,
+                                    },
+                                    {
+                                        "to_state": "Filled",
+                                        "base_prob": 0.3,
+                                        "adjustments": adjustments,
+                                    },
+                                    {
+                                        "to_state": "Cancelled",
+                                        "base_prob": 0.1,
+                                        "adjustments": [],
+                                    },
+                                ],
+                                "Partial Fill": [
+                                    {
+                                        "to_state": "Partial Fill",
+                                        "base_prob": 0.3,
+                                        "adjustments": [],
+                                    },
+                                    {
+                                        "to_state": "Filled",
+                                        "base_prob": 0.6,
+                                        "adjustments": adjustments,
+                                    },
+                                    {
+                                        "to_state": "Cancelled",
+                                        "base_prob": 0.1,
+                                        "adjustments": [],
+                                    },
+                                ],
+                            },
+                        }
+                    )
                 break
 
     # Find execution/trade event tables
@@ -558,24 +792,32 @@ def build_trading_config(schema: dict) -> dict:
         if event_config and "event" in event_config:
             for event_table in event_tables:
                 evt = event_config["event"].copy()
-                events.append({
-                    "event_table": event_table,
-                    "emitted_by": order_table,
-                    "emit_when_states": evt.get("emit_when_states", ["Open", "Partial Fill"]),
-                    "lambda_base": evt["frequency"]["lambda_base"],
-                    "lambda_modifiers": evt["frequency"].get("lambda_modifiers", [])
-                })
+                events.append(
+                    {
+                        "event_table": event_table,
+                        "emitted_by": order_table,
+                        "emit_when_states": evt.get(
+                            "emit_when_states", ["Open", "Partial Fill"]
+                        ),
+                        "lambda_base": evt["frequency"]["lambda_base"],
+                        "lambda_modifiers": evt["frequency"].get(
+                            "lambda_modifiers", []
+                        ),
+                    }
+                )
         else:
             order_table_obj = tables[order_table]
             modifiers = build_lambda_modifiers(order_table_obj)
             for event_table in event_tables:
-                events.append({
-                    "event_table": event_table,
-                    "emitted_by": order_table,
-                    "emit_when_states": ["Open", "Partial Fill"],
-                    "lambda_base": 2.0,
-                    "lambda_modifiers": modifiers
-                })
+                events.append(
+                    {
+                        "event_table": event_table,
+                        "emitted_by": order_table,
+                        "emit_when_states": ["Open", "Partial Fill"],
+                        "lambda_base": 2.0,
+                        "lambda_modifiers": modifiers,
+                    }
+                )
 
     # Add key distributions from schema fields
     for table_name, table in tables.items():
@@ -591,11 +833,13 @@ def build_trading_config(schema: dict) -> dict:
                 field_lower = field.lower()
                 if "quantity" in field_lower or "volume" in field_lower:
                     key_distributions[table_name][field] = {
-                        "distribution": "lognormal", "params": {"mean": 1000, "sigma": 0.8}
+                        "distribution": "lognormal",
+                        "params": {"mean": 1000, "sigma": 0.8},
                     }
                 elif "price" in field_lower:
                     key_distributions[table_name][field] = {
-                        "distribution": "lognormal", "params": {"mean": 100, "sigma": 0.5}
+                        "distribution": "lognormal",
+                        "params": {"mean": 100, "sigma": 0.5},
                     }
 
             # Add categorical distributions
@@ -604,35 +848,32 @@ def build_trading_config(schema: dict) -> dict:
                 if "type" in field_lower and "trader" in field_lower:
                     key_distributions[table_name][field] = {
                         "distribution": "categorical",
-                        "params": {"categories": ["Retail", "Institutional", "HFT"]}
+                        "params": {"categories": ["Retail", "Institutional", "HFT"]},
                     }
                 elif "side" in field_lower:
                     key_distributions[table_name][field] = {
                         "distribution": "categorical",
-                        "params": {"categories": ["Buy", "Sell"]}
+                        "params": {"categories": ["Buy", "Sell"]},
                     }
 
     # Date constraints
     for table in tables.values():
         dates = find_date_fields(table)
         if len(dates) >= 2:
-            constraints.append({
-                "type": "temporal_order",
-                "params": {"fields": dates}
-            })
+            constraints.append({"type": "temporal_order", "params": {"fields": dates}})
 
     return {
         "state_machines": state_machines,
         "events": events,
         "constraints": constraints,
-        "key_distributions": key_distributions
+        "key_distributions": key_distributions,
     }
 
     return {
         "state_machines": state_machines,
         "events": events,
         "constraints": constraints,
-        "key_distributions": {}
+        "key_distributions": {},
     }
 
 
