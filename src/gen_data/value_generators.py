@@ -68,14 +68,18 @@ def generate_numerical_column(
         return [rng.gauss(650, 100) for _ in range(count)]  # Credit score range
     elif "rate" in col_name or "yield" in col_name or "interest" in col_name:
         return [rng.gauss(5.5, 3.0) for _ in range(count)]  # Percentage rates
-    elif "amount" in col_name or "balance" in col_name or "principal" in col_name:
-        return [rng.lognormvariate(8, 1.2) for _ in range(count)]  # Right-skewed monetary values
+    elif "income" in col_name or "salary" in col_name or "revenue" in col_name or "earnings" in col_name:
+        return [round(rng.lognormvariate(11.0, 0.6), 2) for _ in range(count)]  # Annual income ~$60k median
+    elif "limit" in col_name or "credit_limit" in col_name:
+        return [round(rng.lognormvariate(9.5, 0.7), 2) for _ in range(count)]  # Credit limit ~$13k median
+    elif "amount" in col_name or "balance" in col_name or "principal" in col_name or "payment" in col_name or "price" in col_name or "cost" in col_name or "fee" in col_name:
+        return [round(rng.lognormvariate(6.5, 1.0), 2) for _ in range(count)]  # General monetary ~$665 median
     elif "age" in col_name:
         return [int(rng.gauss(35, 12)) for _ in range(count)]  # Adult age distribution
     elif "quantity" in col_name or "count" in col_name:
         return [int(rng.lognormvariate(2, 0.5)) for _ in range(count)]  # Small positive integers
 
-    return [rng.gauss(50, 20) for _ in range(count)]
+    return [round(rng.gauss(50, 20), 2) for _ in range(count)]
 
 
 def generate_risk_from_segment(segment: str, rng: random.Random) -> str:
@@ -101,7 +105,13 @@ def generate_categorical_column(
             return rng.choices(categories, weights=weights, k=count)
 
     col_name = col["name"].lower()
-    if "status" in col_name or "state" in col_name:
+    if "gender" in col_name or "sex" in col_name:
+        return rng.choices(["Male", "Female"], weights=[50, 50], k=count)
+    elif "marital" in col_name:
+        return rng.choices(["Single", "Married", "Divorced", "Widowed"], weights=[35, 45, 15, 5], k=count)
+    elif "employment" in col_name:
+        return rng.choices(["Employed", "Self-Employed", "Unemployed", "Retired", "Student"], weights=[55, 20, 10, 10, 5], k=count)
+    elif "status" in col_name or "state" in col_name:
         return rng.choices(["Active", "Inactive", "Pending", "Closed"], weights=[70, 10, 12, 8], k=count)
     elif "profile" in col_name or "behavior" in col_name:
         return rng.choices(["Conservative", "Moderate", "Aggressive"], weights=[50, 35, 15], k=count)
