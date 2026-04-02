@@ -13,7 +13,8 @@ wheels/
 output
 output_*
 demo_output
+assignment
+biz_logic/
 
 .idea
 .DS_Store
-biz_logic/
