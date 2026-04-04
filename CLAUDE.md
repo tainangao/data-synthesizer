@@ -58,7 +58,6 @@ The codebase follows a two-phase pipeline:
 
 - `RECORD_COUNT`: Number of records per table
 - `SEED`: Random seed for reproducibility
-- `STRESS_MODE`: Skip expensive metrics for performance testing
 - `SQLITE_BATCH_SIZE`: Batch size for SQLite inserts (default 5000)
 - `PARQUET_CHUNK_SIZE`: Chunk size for Parquet/Delta writes (default 50000)
 

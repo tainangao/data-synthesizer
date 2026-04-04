@@ -179,7 +179,7 @@ Reference artifacts:
 | Synthetic Data Quality (25%) | **Validation-first approach with automated testing** | `validate_output.py` + `tests/test_sample_output.py` |
 | Engineering Implementation (20%) | Clean modules, Pydantic validation, batch processing | `src/` structure, type hints throughout |
 | Semi-Structured Data (15%) | JSON/XML fields in schema and data | `additional_data`, `risk_factors` columns |
-| Scalability & Performance (15%) | Configurable batch sizes, chunked writes, stress mode | `main.py` config options |
+| Scalability & Performance (15%) | **Polars** for fast DataFrame operations; configurable batch sizes, chunked writes, stress mode | `main.py` config options, `src/gen_data/data_writers.py` |
 
 **Key Differentiator:** Most submissions generate data. This one proves it's correct.
 

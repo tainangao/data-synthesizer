@@ -1,8 +1,4 @@
 """Event emission with Poisson distribution and lambda modifiers."""
-
-import random
-from typing import Any
-
 import numpy as np
 import polars as pl
 

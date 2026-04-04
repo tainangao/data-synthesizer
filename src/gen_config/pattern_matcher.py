@@ -869,13 +869,6 @@ def build_trading_config(schema: dict) -> dict:
         "key_distributions": key_distributions,
     }
 
-    return {
-        "state_machines": state_machines,
-        "events": events,
-        "constraints": constraints,
-        "key_distributions": {},
-    }
-
 
 def generate_behavioral_mapping(schema: dict) -> dict:
     """Generate behavioral mapping using pattern matching."""

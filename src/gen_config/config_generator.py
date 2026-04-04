@@ -77,7 +77,6 @@ def translate_schema_to_config(
     schema: dict,
     base_records: int = 1000,
     seed: int = 42,
-    logic_file: Path | None = None  # noqa: ARG001
 ) -> dict:
     """Translate JSON schema to scenario config.
 
@@ -85,7 +84,6 @@ def translate_schema_to_config(
         schema: JSON schema from Part 1
         base_records: Base record count for table_counts calculation
         seed: Random seed for reproducibility
-        logic_file: Unused (kept for compatibility)
 
     Returns:
         Scenario configuration dict

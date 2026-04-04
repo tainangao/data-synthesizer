@@ -40,10 +40,3 @@ def parse_datetime(value: object) -> datetime | None:
         return datetime.combine(d, datetime.min.time())
     except ValueError:
         return None
-
-
-def random_datetime(start: datetime, end: datetime) -> datetime:
-    if end <= start:
-        end = start + timedelta(days=1)
-    span_seconds = int((end - start).total_seconds())
-    return start + timedelta(seconds=random.randint(0, span_seconds))

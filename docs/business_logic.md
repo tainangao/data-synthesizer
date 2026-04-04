@@ -109,7 +109,6 @@ This document provides guidance for mapping schemas to realistic behavioral patt
 3. Initialize state machines with appropriate starting states
 
 ### Event-Based Simulation
-- Simulate day-by-day timeline
 - Update entity states based on transition probabilities
 - Generate events (transactions, orders, payments) when entities are in eligible states
 - Apply feature-based adjustments to base probabilities

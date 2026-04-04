@@ -3,13 +3,6 @@ from collections import defaultdict
 from src.utils.common import tokens
 
 
-def pk_column(table: dict) -> dict | None:
-    for col in table["columns"]:
-        if col.get("primary_key"):
-            return col
-    return None
-
-
 def table_order(schema: dict) -> list[str]:
     tables = {t["name"]: t for t in schema["tables"]}
     deps = {

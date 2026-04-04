@@ -598,15 +598,6 @@ def _apply_execution_constraints(
     return df
 
 
-def _find_parent_pk_col(table: dict, parent_table: str) -> str | None:
-    """Find the parent PK column referenced by this event table's FK."""
-    for col in table["columns"]:
-        fk = col.get("foreign_key")
-        if fk and fk["table"] == parent_table:
-            return fk["column"]
-    return None
-
-
 def _find_state_field(df: pl.DataFrame) -> str | None:
     """Find a status/state field in a DataFrame by column name heuristics."""
     col_names = [c.lower() for c in df.columns]

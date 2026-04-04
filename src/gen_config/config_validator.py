@@ -54,18 +54,12 @@ class EventDefinition(BaseModel):
     emitted_by: str
     emit_when_states: list[str]
     frequency: EventFrequency
-    fields: dict[str, FieldDistribution] = Field(default_factory=dict)
 
 
 class Constraint(BaseModel):
     """Data constraint definition."""
     type: str  # Allow any constraint type
     fields: list[str] | None = None
-    entity: str | None = None
-    event_table: str | None = None
-    credit_field: str | None = None
-    debit_field: str | None = None
-    balance_field: str | None = None
 
 
 class SimulationConfig(BaseModel):
