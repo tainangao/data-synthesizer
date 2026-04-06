@@ -63,7 +63,8 @@ def generate_data(
 
     row_counts: dict[str, int] = {}
 
-    # ── Phase 1: Entity tables ──────────────────────────────────────────
+    # ── Phase 1: Generate all entity tables ─────────────────────────────
+    # FKs are deferred - columns are populated with None placeholders
     for table_name in generation_order:
         if table_name not in tables_by_name or table_name in events:
             continue
@@ -87,12 +88,9 @@ def generate_data(
         # Store PK pool and DataFrame for child tables
         _store_table_state(table, df, state)
 
-        for writer in writers:
-            writer.write_dataframe(table, df)
-
         row_counts[table_name] = len(df)
 
-    # ── Phase 2: Event tables ───────────────────────────────────────────
+    # ── Phase 2: Generate all event tables ──────────────────────────────
     for event_table_name, event_config in events.items():
         if event_table_name not in tables_by_name:
             continue
@@ -112,18 +110,50 @@ def generate_data(
             state_machines,
         )
 
+        # Always store state (even empty) so Phase 3 FK resolution knows this
+        # table exists and doesn't raise on missing PKs.
+        _store_table_state(table, df, state)
+
         if df.is_empty():
             logger.warning(f"Skipping empty event table: {event_table_name}")
             row_counts[event_table_name] = 0
             continue
 
-        # Update parent balance if applicable
-        _update_parent_balance(table, df, event_config, state, tables_by_name, writers)
-
-        for writer in writers:
-            writer.write_dataframe(table, df)
-
         row_counts[event_table_name] = len(df)
+
+    # ── Phase 3: Resolve FK columns for all tables ────────────────────
+    # After all PKs exist, resolve FKs. When 1st table is being created, no PKs exist yet so FKs are set to None.
+    _resolve_fk_columns(state, tables_by_name, rng)
+
+    # ── Phase 4: Update parent balances and write all tables ───────────
+    # Parent balance updates and writes require resolved FKs
+    for event_table_name, event_config in events.items():
+        if event_table_name not in tables_by_name:
+            continue
+        table = tables_by_name[event_table_name]
+        event_df = state["table_dfs"].get(event_table_name)
+        if event_df is not None and not event_df.is_empty():
+            _update_parent_balance(table, event_df, event_config, state, tables_by_name, writers)
+
+    # Write all entity tables
+    for table_name in generation_order:
+        if table_name not in tables_by_name or table_name in events:
+            continue
+        table = tables_by_name[table_name]
+        df = state["table_dfs"].get(table_name)
+        if df is not None:
+            for writer in writers:
+                writer.write_dataframe(table, df)
+
+    # Write all event tables
+    for event_table_name in events:
+        if event_table_name not in tables_by_name:
+            continue
+        table = tables_by_name[event_table_name]
+        df = state["table_dfs"].get(event_table_name)
+        if df is not None and not df.is_empty():
+            for writer in writers:
+                writer.write_dataframe(table, df)
 
     # Apply data-driven lifecycle triggers
     _apply_lifecycle_triggers(state, tables_by_name, events, writers)
@@ -142,14 +172,123 @@ def generate_data(
 
 
 def _apply_feature_correlations(df: pl.DataFrame, rng: random.Random) -> pl.DataFrame:
-    """Apply feature correlations: segment influences risk."""
+    """Apply feature correlations between related columns.
 
-    segment_col = next((c for c in df.columns if "segment" in c.lower()), None)
-    risk_col = next((c for c in df.columns if "risk" in c.lower()), None)
+    Pairs handled (each only applies when both columns are present):
+    - credit_score / score  →  risk   (high score ⟹ low risk)
+    - income / salary       →  segment (high income ⟹ HNW / Mass Affluent)
+    - dti / debt_to_income  →  risk   (high DTI ⟹ high risk)
+    - segment               →  risk   (segment-specific risk weights; handles
+                                       non-standard segment names via fuzzy mapping)
+    """
+    cols_lower = {c.lower(): c for c in df.columns}
 
+    def _find(patterns: list[str]) -> str | None:
+        """Return the first actual column name whose lowercase form contains any pattern."""
+        for c_lower, c_orig in cols_lower.items():
+            if any(p in c_lower for p in patterns):
+                return c_orig
+        return None
+
+    risk_col = _find(["risk"])
+    segment_col = _find(["segment"])
+    score_col = _find(["credit_score", "creditscore", "score"])
+    income_col = _find(["income", "salary", "earnings", "revenue"])
+    dti_col = _find(["dti", "debt_to_income", "debt_income"])
+
+    # ── credit_score → risk ──────────────────────────────────────────────
+    # High score  (≥ 720) → Low risk
+    # Medium score (620–719) → Medium risk
+    # Low score   (< 620)  → High risk
+    if score_col and risk_col:
+        scores = df[score_col].to_list()
+        risk_values = []
+        for s in scores:
+            if s is None:
+                risk_values.append(rng.choices(["Low", "Medium", "High"], weights=[60, 30, 10])[0])
+            elif s >= 720:
+                risk_values.append(rng.choices(["Low", "Medium", "High"], weights=[80, 17, 3])[0])
+            elif s >= 620:
+                risk_values.append(rng.choices(["Low", "Medium", "High"], weights=[45, 40, 15])[0])
+            else:
+                risk_values.append(rng.choices(["Low", "Medium", "High"], weights=[15, 40, 45])[0])
+        df = df.with_columns(pl.Series(risk_col, risk_values))
+
+    # ── income → segment ─────────────────────────────────────────────────
+    # Income is lognormal; use percentile buckets to assign segment.
+    # Top 5% → HNW, next 15% → Mass Affluent, rest → Retail.
+    if income_col and segment_col:
+        incomes = df[income_col].to_list()
+        valid = [v for v in incomes if v is not None]
+        if valid:
+            sorted_vals = sorted(valid)
+            n = len(sorted_vals)
+            hnw_floor = sorted_vals[int(0.95 * n)]
+            affluent_floor = sorted_vals[int(0.80 * n)]
+            seg_values = []
+            for v in incomes:
+                if v is None:
+                    seg_values.append(rng.choices(["Retail", "Mass Affluent", "HNW"], weights=[80, 15, 5])[0])
+                elif v >= hnw_floor:
+                    seg_values.append("HNW")
+                elif v >= affluent_floor:
+                    seg_values.append("Mass Affluent")
+                else:
+                    seg_values.append("Retail")
+            df = df.with_columns(pl.Series(segment_col, seg_values))
+
+    # ── DTI → risk ───────────────────────────────────────────────────────
+    # DTI is a ratio (0–1 or 0–100).  Normalise then apply thresholds.
+    # DTI ≥ 0.43 (43%) is the traditional "high risk" threshold.
+    if dti_col and risk_col:
+        dti_values = df[dti_col].to_list()
+        valid_dti = [v for v in dti_values if v is not None]
+        if valid_dti:
+            # Detect scale: if max > 2 assume percentage (0-100), normalise to 0-1
+            max_dti = max(valid_dti)
+            scale = 100.0 if max_dti > 2 else 1.0
+            dti_risk = []
+            for v in dti_values:
+                if v is None:
+                    dti_risk.append(rng.choices(["Low", "Medium", "High"], weights=[60, 30, 10])[0])
+                else:
+                    ratio = v / scale
+                    if ratio >= 0.43:
+                        dti_risk.append(rng.choices(["Low", "Medium", "High"], weights=[10, 35, 55])[0])
+                    elif ratio >= 0.30:
+                        dti_risk.append(rng.choices(["Low", "Medium", "High"], weights=[40, 42, 18])[0])
+                    else:
+                        dti_risk.append(rng.choices(["Low", "Medium", "High"], weights=[70, 25, 5])[0])
+            df = df.with_columns(pl.Series(risk_col, dti_risk))
+
+    # ── segment → risk ───────────────────────────────────────────────────
+    # Applied last so it can refine risk after any score/DTI pass.
+    # Fuzzy-maps non-standard segment labels to the three canonical tiers.
     if segment_col and risk_col:
+        # If score or DTI already set risk, only override rows where segment
+        # adds additional signal (i.e. we still run it — the weights differ
+        # per segment so the last assignment wins; segment is the "primary"
+        # business driver when explicitly present).
+        def _segment_to_risk_weights(seg: str) -> tuple[list[str], list[int]]:
+            cats = ["Low", "Medium", "High"]
+            if seg is None:
+                return cats, [60, 30, 10]
+            s = seg.lower()
+            # HNW tier synonyms
+            if any(t in s for t in ["hnw", "high net", "private", "ultra", "vip", "premium", "platinum"]):
+                return cats, [85, 13, 2]
+            # Mass Affluent / mid tier synonyms
+            if any(t in s for t in ["mass", "affluent", "mass affluent", "institutional", "corporate", "mid"]):
+                return cats, [70, 25, 5]
+            # Retail / base tier synonyms
+            if any(t in s for t in ["retail", "consumer", "standard", "basic", "hft", "individual"]):
+                return cats, [50, 35, 15]
+            # Unknown — light tilt toward low risk
+            return cats, [60, 30, 10]
+
+        segs = df[segment_col].to_list()
         correlated_risk = [
-            generate_risk_from_segment(seg, rng) for seg in df[segment_col].to_list()
+            rng.choices(*_segment_to_risk_weights(seg))[0] for seg in segs
         ]
         df = df.with_columns(pl.Series(risk_col, correlated_risk))
 
@@ -176,7 +315,7 @@ def _generate_entity_table(
     columns: dict[str, list] = {}
     temporal_anchor: list[datetime] | None = None
 
-    # ── Pass 1: PK and FK columns ───────────────────────────────────
+    # ── Pass 1: PK columns (FKs deferred to Pass 2) ─────────────────
     for col in table["columns"]:
         col_name = col["name"]
 
@@ -184,15 +323,8 @@ def _generate_entity_table(
             columns[col_name] = generate_column(col, None, count, rng, fake)
 
         elif col.get("foreign_key"):
-            fk = col["foreign_key"]
-            parent_table = fk["table"]
-            parent_pks = state["pk_values"].get(parent_table, [])
-            if not parent_pks:
-                raise ValueError(
-                    f"Parent table '{parent_table}' not found for FK {table_name}.{col_name}. "
-                    f"This indicates a schema generation bug - FK references must be validated during schema generation."
-                )
-            columns[col_name] = rng.choices(parent_pks, k=count)
+            # FKs are resolved in Pass 3 after all PKs exist
+            columns[col_name] = [None] * count
 
     # ── Pass 2: Remaining columns ───────────────────────────────────
     for col in table["columns"]:
@@ -428,6 +560,49 @@ def _store_table_state(table: dict, df: pl.DataFrame, state: dict) -> None:
         state["pk_values"][table_name] = df[pk_col].to_list()
 
     state["table_dfs"][table_name] = df
+
+
+def _resolve_fk_columns(state: dict, tables_by_name: dict, rng: random.Random) -> None:
+    """Pass 2: Resolve all FK columns now that all PKs are available.
+
+    Mutates state["table_dfs"] in-place for each table's FK columns.
+    Self-referential FKs and circular FKs both work since all PKs exist.
+    """
+    for table_name, df in state["table_dfs"].items():
+        table = tables_by_name.get(table_name)
+        if table is None:
+            continue
+
+        for col in table["columns"]:
+            fk = col.get("foreign_key")
+            if not fk:
+                continue
+
+            parent_table = fk["table"]
+            parent_pks = state["pk_values"].get(parent_table, [])
+            if not parent_pks:
+                if parent_table in state["table_dfs"]:
+                    # Parent is a known event table that produced 0 rows — leave FK as None
+                    logger.warning(
+                        f"FK parent table '{parent_table}' produced 0 rows; "
+                        f"{table_name}.{col['name']} will remain null."
+                    )
+                else:
+                    raise ValueError(
+                        f"FK parent table '{parent_table}' has no PKs available when resolving "
+                        f"{table_name}.{col['name']}. Parent may not be in generation_order."
+                    )
+                continue
+
+            fk_col_name = col["name"]
+            if fk_col_name not in df.columns:
+                continue
+
+            count = len(df)
+            resolved_fk = rng.choices(parent_pks, k=count)
+            df = df.with_columns(pl.Series(fk_col_name, resolved_fk))
+
+        state["table_dfs"][table_name] = df
 
 
 # ── Event table generation ──────────────────────────────────────────────

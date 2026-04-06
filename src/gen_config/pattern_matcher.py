@@ -150,12 +150,38 @@ def detect_event_tables(schema: dict, entity_table: str) -> list[str]:
         "borrower",
         "account",
     ]
+
+    # Only tables that have FK columns can be event/fact tables.
+    # Reference/lookup tables (no FKs) are never events — they are parent entities.
+    tables_with_fk = {
+        t["name"]
+        for t in schema["tables"]
+        for col in t.get("columns", t.get("fields", []))
+        if col.get("foreign_key")
+    }
+
+    # Tables that are themselves FK parents of other tables must be entities, not events.
+    # e.g. in customers→accounts→transactions→fraud_alerts, transactions is a parent of
+    # fraud_alerts so it must be generated as an entity, not via Poisson sampling.
+    fk_parents = {
+        col["foreign_key"]["table"]
+        for t in schema["tables"]
+        for col in t.get("columns", t.get("fields", []))
+        if col.get("foreign_key")
+    }
+
     event_tables = []
 
     for table in schema["tables"]:
         table_name = table["name"]
         table_lower = table_name.lower()
         if table_name == entity_table:
+            continue
+        # Skip reference/lookup tables that have no FK relationships
+        if table_name not in tables_with_fk:
+            continue
+        # Skip tables that are themselves FK parents of other tables
+        if table_name in fk_parents:
             continue
         # Skip tables that look like entity/master tables
         if any(pattern in table_lower for pattern in entity_patterns):
